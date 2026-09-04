@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Vision observation v0.1.0",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": "0.1.0"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "analysisId": {
+      "type": "string"
+    },
+    "targetId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "streamEpoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "processedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "state": {
+      "enum": [
+        "AWAITING_SELECTION",
+        "CALIBRATING",
+        "TRACKING",
+        "MISSING",
+        "AMBIGUOUS",
+        "REACQUIRING",
+        "EXPIRED"
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "landmarks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "x",
+          "y",
+          "confidence"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "confirmedRepEvents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "eventId",
+          "exerciseId"
+        ],
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "exerciseId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "evidence"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "sessionId",
+    "analysisId",
+    "targetId",
+    "streamEpoch",
+    "sequence",
+    "capturedAt",
+    "processedAt",
+    "state",
+    "reason",
+    "landmarks",
+    "confirmedRepEvents",
+    "observations"
+  ],
+  "additionalProperties": false
+}
