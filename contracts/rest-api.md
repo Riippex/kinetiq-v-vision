@@ -1,4 +1,7 @@
-# REST Analysis Contract v0.1
+# REST Analysis Contract v0.1 (SUPERSEDED)
+
+> [!WARNING]
+> **SUPERSEDED CONTRACT**: This v0.1 provisional specification is superseded by the canonical Vision v1 contract at [contracts/v1/rest-api.md](v1/rest-api.md). Refer to v1 for active endpoints, schemas, and epoch/sequence invariants.
 
 Design contract. Authentication is required on every route; private network placement alone is insufficient. Product-origin requests carry a scoped service credential, session authorization context and correlation ID. Request schema/identity implementation will be pinned during scaffolding.
 

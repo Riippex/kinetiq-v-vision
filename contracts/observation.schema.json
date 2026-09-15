@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Vision observation v0.1.0",
+  "title": "Vision observation v0.1.0 (SUPERSEDED)",
+  "description": "SUPERSEDED: This v0.1 provisional schema is superseded by contracts/v1/schema/vision-observation.v1.schema.json",
   "type": "object",
   "properties": {
     "schemaVersion": {

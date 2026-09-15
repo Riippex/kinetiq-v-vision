@@ -1,6 +1,6 @@
 # Session Target Tracking and Visibility Recovery
 
-September 4, 2026. Accepted product requirements: explicitly select the exercising user at session start, ignore other people and animals, retain short-lived tracking context, explain visibility-related pauses, and evaluate squat, biceps curl, and lateral raise first. Algorithms and timing defaults below are proposals to benchmark, not implemented guarantees.
+September 4, 2026. Accepted product requirements: explicitly select the exercising user at session start, ignore other people and animals, retain short-lived tracking context, explain visibility-related pauses, and evaluate bodyweight squat, push-up, plank, and glute bridge first. Algorithms and timing defaults below are proposals to benchmark, not implemented guarantees.
 
 ## Session Enrollment
 
@@ -44,6 +44,6 @@ Return only selected-user analysis to product clients. A missing required joint 
 
 ## Evaluation and MLflow
 
-Initial exercises: squat, biceps curl, lateral raise. Include authorized clips with another person crossing the user, a stationary bystander, a pet crossing, the user leaving/returning, similar clothing, partial occlusion, camera motion, dropped frames, and an engine restart. Hold out people and clips from parameter tuning where possible.
+Initial exercises: bodyweight squat, push-up, plank, glute bridge. Include authorized clips with another person crossing the user, a stationary bystander, a pet crossing, the user leaving/returning, similar clothing, partial occlusion, camera motion, dropped frames, and an engine restart. Hold out people and clips from parameter tuning where possible.
 
 Measure target-switch errors, non-target repetitions attributed to the user, false pauses, correct reacquisition, time to pause/recover, rep-count error, and end-to-end latency. Treat any observed silent target switch or bystander-attributed repetition as a release-blocking failure requiring investigation; a clean test set is not proof of zero real-world risk.
