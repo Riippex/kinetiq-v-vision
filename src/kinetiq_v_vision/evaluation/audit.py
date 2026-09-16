@@ -1,5 +1,5 @@
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -50,7 +50,10 @@ def audit_splits_and_participants(manifest_data: dict[str, Any]) -> dict[str, An
     clips = manifest_data.get("clips", [])
     participant_splits: dict[str, set[str]] = {}
     clips_by_split: dict[str, int] = {"development": 0, "heldout": 0}
-    participants_by_split: dict[str, set[str]] = {"development": set(), "heldout": set()}
+    participants_by_split: dict[str, set[str]] = {
+        "development": set(),
+        "heldout": set(),
+    }
 
     for clip in clips:
         p_id = clip.get("participant_id")
@@ -71,7 +74,7 @@ def audit_splits_and_participants(manifest_data: dict[str, Any]) -> dict[str, An
         "total_clips": len(clips),
         "clips_by_split": clips_by_split,
         "participants_by_split": {
-            k: sorted(list(v)) for k, v in participants_by_split.items()
+            k: sorted(v) for k, v in participants_by_split.items()
         },
         "leakage_participants": leakage_participants,
     }
@@ -103,8 +106,8 @@ def audit_exercise_coverage(manifest_data: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "matrix": coverage_matrix,
-        "missing_canonical_exercises": sorted(list(missing_exercises)),
-        "unexpected_exercises": sorted(list(unexpected_exercises)),
+        "missing_canonical_exercises": sorted(missing_exercises),
+        "unexpected_exercises": sorted(unexpected_exercises),
         "has_full_coverage": len(missing_exercises) == 0,
     }
 
@@ -253,37 +256,51 @@ class DatasetAuditReport:
             "## 1. Split Isolation",
             f"- Isolated (No Leakage): {self.split_audit.get('is_isolated')}",
             f"- Total Participants: {self.split_audit.get('total_participants')}",
-            f"- Clips: dev={self.split_audit.get('clips_by_split', {}).get('development', 0)}, "
-            f"heldout={self.split_audit.get('clips_by_split', {}).get('heldout', 0)}",
+            (
+                f"- Clips: dev={self.split_audit.get('clips_by_split', {}).get('development', 0)}, "
+                f"heldout={self.split_audit.get('clips_by_split', {}).get('heldout', 0)}"
+            ),
         ]
         if self.split_audit.get("leakage_participants"):
-            lines.append(f"- **LEAKAGE DETECTED:** {self.split_audit['leakage_participants']}")
+            lines.append(
+                f"- **LEAKAGE DETECTED:** {self.split_audit['leakage_participants']}"
+            )
 
-        lines.extend([
-            "",
-            "## 2. Exercise Coverage",
-            "| Exercise | Development | Heldout | Total |",
-            "|---|---|---|---|",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 2. Exercise Coverage",
+                "| Exercise | Development | Heldout | Total |",
+                "|---|---|---|---|",
+            ]
+        )
         matrix = self.exercise_audit.get("matrix", {})
         for ex, counts in matrix.items():
-            lines.append(f"| `{ex}` | {counts['development']} | {counts['heldout']} | {counts['total']} |")
+            lines.append(
+                f"| `{ex}` | {counts['development']} | {counts['heldout']} | {counts['total']} |"
+            )
 
-        lines.extend([
-            "",
-            "## 3. Condition Taxonomy Coverage",
-        ])
-        for cond, count in sorted(self.taxonomy_audit.get("condition_counts", {}).items()):
+        lines.extend(
+            [
+                "",
+                "## 3. Condition Taxonomy Coverage",
+            ]
+        )
+        for cond, count in sorted(
+            self.taxonomy_audit.get("condition_counts", {}).items()
+        ):
             lines.append(f"- `{cond}`: {count} clips")
 
-        lines.extend([
-            "",
-            "## 4. Annotation Integrity",
-            f"- Valid Annotations: {self.annotation_audit.get('valid_count')} / {self.annotation_audit.get('total_clips')}",
-            f"- Missing Annotations: {len(self.annotation_audit.get('missing_annotations', []))}",
-            f"- Schema Errors: {len(self.annotation_audit.get('schema_errors', {}))}",
-            f"- Timing Violations: {len(self.annotation_audit.get('timing_violations', []))}",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 4. Annotation Integrity",
+                f"- Valid Annotations: {self.annotation_audit.get('valid_count')} / {self.annotation_audit.get('total_clips')}",
+                f"- Missing Annotations: {len(self.annotation_audit.get('missing_annotations', []))}",
+                f"- Schema Errors: {len(self.annotation_audit.get('schema_errors', {}))}",
+                f"- Timing Violations: {len(self.annotation_audit.get('timing_violations', []))}",
+            ]
+        )
 
         return "\n".join(lines)
 

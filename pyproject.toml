@@ -11,6 +11,9 @@ dependencies = [
     "uvicorn[standard]>=0.30.0,<1.0.0",
 ]
 
+[project.scripts]
+kinetiq-vision = "kinetiq_v_vision.interfaces.cli.main:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -29,3 +32,10 @@ dev = [
     "pytest>=9.0.0",
     "ruff>=0.5.0",
 ]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+extend-select = ["I"]
+ignore = ["B008"]

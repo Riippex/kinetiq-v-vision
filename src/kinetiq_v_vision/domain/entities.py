@@ -1,6 +1,6 @@
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from kinetiq_v_vision.domain.exceptions import (
     InvalidEpochError,
@@ -86,15 +86,20 @@ class Analysis:
     state: AnalysisState = AnalysisState.AWAITING_SELECTION
     target_person_id: str | None = None
     last_valid_at: datetime | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     candidates: dict[str, CandidatePerson] = field(default_factory=dict)
 
     def select_target(self, candidate_id: str, expected_epoch: int) -> None:
         """Explicitly confirm the candidate target person for this analysis context."""
         if expected_epoch != self.epoch:
-            raise StaleEpochError(expected_epoch=expected_epoch, current_epoch=self.epoch)
+            raise StaleEpochError(
+                expected_epoch=expected_epoch, current_epoch=self.epoch
+            )
 
-        if candidate_id not in self.candidates and candidate_id != self.target_person_id:
+        if (
+            candidate_id not in self.candidates
+            and candidate_id != self.target_person_id
+        ):
             raise InvalidTargetError(candidate_id)
 
         # If re-selecting a target after initial confirmation, advance the epoch
@@ -104,7 +109,7 @@ class Analysis:
 
         self.target_person_id = candidate_id
         self.state = AnalysisState.TRACKING
-        self.last_valid_at = datetime.now(timezone.utc)
+        self.last_valid_at = datetime.now(UTC)
 
     def increment_epoch(self) -> int:
         """Advance epoch on stream restart, reconnection, or re-targeting."""

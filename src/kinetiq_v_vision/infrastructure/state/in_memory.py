@@ -1,5 +1,5 @@
-from collections import deque
 import threading
+from collections import deque
 
 from kinetiq_v_vision.application.ports.state import AnalysisRepositoryPort
 from kinetiq_v_vision.domain.entities import Analysis, Observation
@@ -20,7 +20,9 @@ class InMemoryAnalysisRepository(AnalysisRepositoryPort):
         with self._lock:
             self._analyses[analysis.analysis_id] = analysis
             if analysis.analysis_id not in self._buffers:
-                self._buffers[analysis.analysis_id] = deque(maxlen=self._buffer_capacity)
+                self._buffers[analysis.analysis_id] = deque(
+                    maxlen=self._buffer_capacity
+                )
 
     def get_by_id(self, analysis_id: str) -> Analysis | None:
         with self._lock:
@@ -59,14 +61,18 @@ class InMemoryAnalysisRepository(AnalysisRepositoryPort):
         if after_cursor:
             parts = after_cursor.split(":")
             if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
-                raise ValueError(f"Malformed cursor format: '{after_cursor}'. Expected 'epoch:sequence'")
+                raise ValueError(
+                    f"Malformed cursor format: '{after_cursor}'. Expected 'epoch:sequence'"
+                )
             req_epoch = int(parts[0])
             req_seq = int(parts[1])
 
             oldest_in_buf = buf[0]
             if (req_epoch, req_seq) < (oldest_in_buf.epoch, oldest_in_buf.sequence):
                 oldest_cursor = f"{oldest_in_buf.epoch}:{oldest_in_buf.sequence}"
-                raise CursorExpiredError(requested_cursor=after_cursor, oldest_cursor=oldest_cursor)
+                raise CursorExpiredError(
+                    requested_cursor=after_cursor, oldest_cursor=oldest_cursor
+                )
 
             found = False
             for idx, obs in enumerate(buf):

@@ -26,7 +26,6 @@ def synthetic_manifest() -> dict:
 @pytest.fixture
 def synthetic_annotations(synthetic_manifest: dict) -> dict[str, dict]:
     annotations = {}
-    ann_dir = FIXTURES_DATA_DIR / "annotations"
     for clip in synthetic_manifest["clips"]:
         ref = clip["annotation_ref"]
         ann_path = FIXTURES_DATA_DIR / ref
@@ -41,7 +40,9 @@ def test_manifest_schema_validation_passes(synthetic_manifest: dict) -> None:
     assert not errors, f"Manifest failed validation: {errors}"
 
 
-def test_manifest_schema_validation_catches_invalid_hash(synthetic_manifest: dict) -> None:
+def test_manifest_schema_validation_catches_invalid_hash(
+    synthetic_manifest: dict,
+) -> None:
     bad_manifest = copy.deepcopy(synthetic_manifest)
     bad_manifest["clips"][0]["sha256"] = "invalid_hash_not_64_chars"
     errors = validate_manifest_schema(bad_manifest)
@@ -71,7 +72,10 @@ def test_split_audit_catches_leakage(synthetic_manifest: dict) -> None:
     audit = audit_splits_and_participants(leaking_manifest)
     assert audit["is_isolated"] is False
     assert "synthetic-user-01" in audit["leakage_participants"]
-    assert audit["leakage_participants"]["synthetic-user-01"] == {"development", "heldout"}
+    assert audit["leakage_participants"]["synthetic-user-01"] == {
+        "development",
+        "heldout",
+    }
 
 
 def test_exercise_coverage_audit(synthetic_manifest: dict) -> None:
@@ -93,7 +97,9 @@ def test_condition_taxonomy_audit(synthetic_manifest: dict) -> None:
     assert taxonomy["total_tagged_conditions"] >= 5
 
 
-def test_annotations_audit_passes(synthetic_manifest: dict, synthetic_annotations: dict) -> None:
+def test_annotations_audit_passes(
+    synthetic_manifest: dict, synthetic_annotations: dict
+) -> None:
     res = audit_annotations(synthetic_manifest, synthetic_annotations)
     assert res["is_valid"] is True
     assert res["valid_count"] == len(synthetic_manifest["clips"])

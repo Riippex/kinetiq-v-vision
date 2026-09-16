@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kinetiq.ai/schemas/models/model-manifest.schema.json",
+  "title": "ModelManifestV1",
+  "description": "Schema for Kinetiq V Vision executable model manifests pinning upstream provenance, download URLs, SHA-256 hashes, licenses, preprocessing, and runtime compatibility",
+  "type": "object",
+  "required": [
+    "manifest_version",
+    "model_id",
+    "model_name",
+    "task",
+    "version",
+    "upstream",
+    "artifact",
+    "preprocessing",
+    "postprocessing",
+    "runtime_compatibility"
+  ],
+  "properties": {
+    "manifest_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$"
+    },
+    "model_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]+$"
+    },
+    "model_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task": {
+      "type": "string",
+      "enum": [
+        "person_detection",
+        "pose_estimation"
+      ]
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "upstream": {
+      "type": "object",
+      "required": [
+        "repository",
+        "commit",
+        "path",
+        "license",
+        "license_url"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "format": "uri"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license_url": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "filename",
+        "format",
+        "sha256",
+        "size_bytes",
+        "download_urls"
+      ],
+      "properties": {
+        "filename": {
+          "type": "string",
+          "pattern": "\\.onnx$"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["onnx"]
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "download_urls": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "preprocessing": {
+      "type": "object",
+      "required": [
+        "color_format",
+        "input_shape",
+        "data_type",
+        "normalization"
+      ],
+      "properties": {
+        "color_format": {
+          "type": "string",
+          "enum": ["RGB", "BGR"]
+        },
+        "input_shape": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "data_type": {
+          "type": "string",
+          "enum": ["float32", "float16", "uint8"]
+        },
+        "normalization": {
+          "type": "string",
+          "enum": [
+            "scale_to_minus_one_to_one",
+            "scale_to_zero_to_one"
+          ]
+        },
+        "aspect_ratio_mode": {
+          "type": "string"
+        },
+        "box_enlarge_factor": {
+          "type": "number",
+          "minimum": 0
+        },
+        "box_pre_enlarge_factor": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "postprocessing": {
+      "type": "object",
+      "required": [
+        "confidence_threshold"
+      ],
+      "properties": {
+        "confidence_threshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "nms_threshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "top_k": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "landmark_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "landmark_channels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "has_segmentation_mask": {
+          "type": "boolean"
+        },
+        "has_heatmap": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtime_compatibility": {
+      "type": "object",
+      "required": [
+        "engine",
+        "preferred_backend",
+        "preferred_target",
+        "supported_targets"
+      ],
+      "properties": {
+        "engine": {
+          "type": "string",
+          "enum": ["opencv_dnn"]
+        },
+        "preferred_backend": {
+          "type": "string"
+        },
+        "preferred_target": {
+          "type": "string"
+        },
+        "supported_targets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

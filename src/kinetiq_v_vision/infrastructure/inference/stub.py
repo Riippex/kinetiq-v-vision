@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from kinetiq_v_vision.application.ports.inference import (
@@ -21,7 +21,7 @@ class StubPersonDetectorAdapter(PersonDetectorPort):
                 candidate_id=self._default_candidate_id,
                 bbox=BoundingBox(x=0.2, y=0.1, width=0.6, height=0.8),
                 confidence=0.95,
-                detected_at=datetime.now(timezone.utc),
+                detected_at=datetime.now(UTC),
             )
         ]
 

@@ -29,7 +29,9 @@ def create_app() -> FastAPI:
         return response
 
     @app.exception_handler(StaleEpochError)
-    async def stale_epoch_handler(request: Request, exc: StaleEpochError) -> JSONResponse:
+    async def stale_epoch_handler(
+        request: Request, exc: StaleEpochError
+    ) -> JSONResponse:
         corr_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
@@ -48,7 +50,9 @@ def create_app() -> FastAPI:
         )
 
     @app.exception_handler(CursorExpiredError)
-    async def cursor_expired_handler(request: Request, exc: CursorExpiredError) -> JSONResponse:
+    async def cursor_expired_handler(
+        request: Request, exc: CursorExpiredError
+    ) -> JSONResponse:
         corr_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
         return JSONResponse(
             status_code=status.HTTP_410_GONE,
@@ -67,7 +71,9 @@ def create_app() -> FastAPI:
         )
 
     @app.exception_handler(AnalysisNotFoundError)
-    async def not_found_handler(request: Request, exc: AnalysisNotFoundError) -> JSONResponse:
+    async def not_found_handler(
+        request: Request, exc: AnalysisNotFoundError
+    ) -> JSONResponse:
         corr_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -83,7 +89,9 @@ def create_app() -> FastAPI:
         )
 
     @app.exception_handler(InvalidTargetError)
-    async def invalid_target_handler(request: Request, exc: InvalidTargetError) -> JSONResponse:
+    async def invalid_target_handler(
+        request: Request, exc: InvalidTargetError
+    ) -> JSONResponse:
         corr_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -99,7 +107,9 @@ def create_app() -> FastAPI:
         )
 
     @app.exception_handler(InvalidEpochError)
-    async def invalid_epoch_handler(request: Request, exc: InvalidEpochError) -> JSONResponse:
+    async def invalid_epoch_handler(
+        request: Request, exc: InvalidEpochError
+    ) -> JSONResponse:
         corr_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

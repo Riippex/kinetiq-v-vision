@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 import pytest
 
 from kinetiq_v_vision.application.use_cases.create_analysis import (
@@ -16,7 +17,6 @@ from kinetiq_v_vision.application.use_cases.select_target import (
 from kinetiq_v_vision.application.use_cases.stop_analysis import StopAnalysisUseCase
 from kinetiq_v_vision.domain.entities import CandidatePerson, Observation
 from kinetiq_v_vision.domain.exceptions import (
-    AnalysisNotFoundError,
     CursorExpiredError,
     StaleEpochError,
 )
@@ -56,7 +56,7 @@ def test_create_and_select_target_flow() -> None:
         candidate_id="person_01",
         bbox=BoundingBox(0.1, 0.1, 0.5, 0.8),
         confidence=0.98,
-        detected_at=datetime.now(timezone.utc),
+        detected_at=datetime.now(UTC),
     )
     analysis.add_candidate(candidate)
     repo.save(analysis)
@@ -89,7 +89,7 @@ def test_select_target_stale_epoch_fails() -> None:
         candidate_id="person_01",
         bbox=BoundingBox(0.1, 0.1, 0.5, 0.8),
         confidence=0.98,
-        detected_at=datetime.now(timezone.utc),
+        detected_at=datetime.now(UTC),
     )
     analysis.add_candidate(candidate)
     repo.save(analysis)
@@ -118,7 +118,7 @@ def test_poll_observations_cursor_and_expiry() -> None:
         )
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for seq in range(1, 6):
         obs = Observation(
             session_id=analysis.session_id,

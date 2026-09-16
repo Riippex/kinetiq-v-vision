@@ -58,10 +58,18 @@ class Container:
         """Instantiate and configure the FastAPI application with dependency overrides."""
         app = create_app()
 
-        app.dependency_overrides[get_create_use_case] = lambda: self.create_analysis_use_case
-        app.dependency_overrides[get_select_use_case] = lambda: self.select_target_use_case
-        app.dependency_overrides[get_poll_use_case] = lambda: self.poll_observations_use_case
-        app.dependency_overrides[get_stop_use_case] = lambda: self.stop_analysis_use_case
+        app.dependency_overrides[get_create_use_case] = lambda: (
+            self.create_analysis_use_case
+        )
+        app.dependency_overrides[get_select_use_case] = lambda: (
+            self.select_target_use_case
+        )
+        app.dependency_overrides[get_poll_use_case] = lambda: (
+            self.poll_observations_use_case
+        )
+        app.dependency_overrides[get_stop_use_case] = lambda: (
+            self.stop_analysis_use_case
+        )
         app.dependency_overrides[get_repository] = lambda: self.repository
 
         return app

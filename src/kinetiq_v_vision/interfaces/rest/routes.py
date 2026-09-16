@@ -1,4 +1,5 @@
 from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from kinetiq_v_vision.application.use_cases.create_analysis import (
@@ -21,10 +22,7 @@ from kinetiq_v_vision.interfaces.rest.dto import (
     CandidateListResponse,
     CreateAnalysisRequest,
     CreateAnalysisResponse,
-    HoldDTO,
-    ObservationDTO,
     ObservationsPageResponse,
-    RepetitionDTO,
     SelectTargetRequest,
     SelectTargetResponse,
 )
@@ -160,7 +158,9 @@ def get_analysis_status(
         session_id=analysis.session_id,
         epoch=analysis.epoch,
         state=analysis.state.value,
-        last_valid_at=analysis.last_valid_at.isoformat() if analysis.last_valid_at else None,
+        last_valid_at=analysis.last_valid_at.isoformat()
+        if analysis.last_valid_at
+        else None,
     )
 
 
@@ -198,7 +198,9 @@ def get_candidates(
 )
 def get_observations(
     analysis_id: str,
-    after: str | None = Query(None, description="Cursor in '{epoch}:{sequence}' format"),
+    after: str | None = Query(
+        None, description="Cursor in '{epoch}:{sequence}' format"
+    ),
     limit: int = Query(50, ge=1, le=100),
     use_case: PollObservationsUseCase = Depends(get_poll_use_case),
 ) -> ObservationsPageResponse:

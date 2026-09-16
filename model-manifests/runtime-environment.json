@@ -1,0 +1,31 @@
+{
+  "manifest_version": "1.0.0",
+  "environment_name": "kinetiq-v-vision-runtime",
+  "updated_at": "2026-09-15T00:00:00Z",
+  "python_spec": {
+    "min_version": "3.12.0",
+    "max_exclusive_version": "3.14.0",
+    "recommended_version": "3.12.8"
+  },
+  "numpy_spec": {
+    "min_version": "2.0.0",
+    "recommended_version": "2.1.0"
+  },
+  "opencv_spec": {
+    "distribution": "opencv-python-headless",
+    "min_version": "4.10.0",
+    "dnn_engine": "onnx_runtime",
+    "dnn_engine_id": 4
+  },
+  "supported_platforms": [
+    "linux-x86_64",
+    "linux-aarch64",
+    "windows-x86_64",
+    "macos-arm64"
+  ],
+  "engine_flags": {
+    "OPENCV_FORCE_DNN_ENGINE": "4",
+    "OMP_NUM_THREADS": "4",
+    "OPENBLAS_NUM_THREADS": "4"
+  }
+}

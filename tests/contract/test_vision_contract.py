@@ -4,7 +4,6 @@ from typing import Any
 
 import pytest
 from jsonschema import Draft202012Validator
-from jsonschema.exceptions import ValidationError
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_DIR = REPOSITORY_ROOT / "contracts" / "v1"
@@ -32,11 +31,15 @@ def observation_schema() -> dict[str, Any]:
     return load_json(schema_path)
 
 
-def test_capabilities_schema_is_valid_draft_2020_12(capabilities_schema: dict[str, Any]) -> None:
+def test_capabilities_schema_is_valid_draft_2020_12(
+    capabilities_schema: dict[str, Any],
+) -> None:
     Draft202012Validator.check_schema(capabilities_schema)
 
 
-def test_observation_schema_is_valid_draft_2020_12(observation_schema: dict[str, Any]) -> None:
+def test_observation_schema_is_valid_draft_2020_12(
+    observation_schema: dict[str, Any],
+) -> None:
     Draft202012Validator.check_schema(observation_schema)
 
 
@@ -95,8 +98,14 @@ def test_negative_fixtures_fail_schema_validation(
 
     validator = Draft202012Validator(observation_schema)
     errors = list(validator.iter_errors(payload))
-    assert errors, f"Expected validation failure for {fixture_name}, but passed successfully"
-    error_messages = " ".join([e.message for e in errors]) + " " + " ".join([str(e.validator) for e in errors])
+    assert errors, (
+        f"Expected validation failure for {fixture_name}, but passed successfully"
+    )
+    error_messages = (
+        " ".join([e.message for e in errors])
+        + " "
+        + " ".join([str(e.validator) for e in errors])
+    )
     assert expected_error_substr.lower() in error_messages.lower(), (
         f"Expected '{expected_error_substr}' in error messages, got: {error_messages}"
     )
@@ -108,7 +117,11 @@ def test_sequence_monotonicity_and_stale_epoch_semantics() -> None:
         {"epoch": 1, "sequence": 1, "state": "CONFIRMED"},
         {"epoch": 1, "sequence": 2, "state": "CONFIRMED"},
         {"epoch": 1, "sequence": 3, "state": "AMBIGUOUS"},
-        {"epoch": 2, "sequence": 1, "state": "CONFIRMED"},  # target reselected, epoch incremented
+        {
+            "epoch": 2,
+            "sequence": 1,
+            "state": "CONFIRMED",
+        },  # target reselected, epoch incremented
         {"epoch": 2, "sequence": 2, "state": "CONFIRMED"},
     ]
 
@@ -123,7 +136,9 @@ def test_sequence_monotonicity_and_stale_epoch_semantics() -> None:
         if obs["epoch"] > current_epoch:
             current_epoch = obs["epoch"]
             last_sequence = 0
-        assert obs["sequence"] > last_sequence, "Non-monotonic sequence within same epoch"
+        assert obs["sequence"] > last_sequence, (
+            "Non-monotonic sequence within same epoch"
+        )
         last_sequence = obs["sequence"]
 
     assert current_epoch == 2

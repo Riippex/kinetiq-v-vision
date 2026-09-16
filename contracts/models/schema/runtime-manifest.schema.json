@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kinetiq.ai/schemas/models/runtime-manifest.schema.json",
+  "title": "RuntimeManifestV1",
+  "description": "Schema for Kinetiq V Vision runtime environment manifests pinning Python, NumPy, OpenCV, ONNX engines, supported platforms, and execution flags",
+  "type": "object",
+  "required": [
+    "manifest_version",
+    "environment_name",
+    "updated_at",
+    "python_spec",
+    "numpy_spec",
+    "opencv_spec",
+    "supported_platforms",
+    "engine_flags"
+  ],
+  "properties": {
+    "manifest_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$"
+    },
+    "environment_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "python_spec": {
+      "type": "object",
+      "required": [
+        "min_version",
+        "max_exclusive_version",
+        "recommended_version"
+      ],
+      "properties": {
+        "min_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+        },
+        "max_exclusive_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+        },
+        "recommended_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "numpy_spec": {
+      "type": "object",
+      "required": [
+        "min_version",
+        "recommended_version"
+      ],
+      "properties": {
+        "min_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+        },
+        "recommended_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opencv_spec": {
+      "type": "object",
+      "required": [
+        "distribution",
+        "min_version",
+        "dnn_engine",
+        "dnn_engine_id"
+      ],
+      "properties": {
+        "distribution": {
+          "type": "string",
+          "enum": ["opencv-python", "opencv-python-headless"]
+        },
+        "min_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+        },
+        "dnn_engine": {
+          "type": "string",
+          "enum": ["default", "onnx_runtime"]
+        },
+        "dnn_engine_id": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "supported_platforms": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "linux-x86_64",
+          "linux-aarch64",
+          "windows-x86_64",
+          "macos-arm64",
+          "macos-x86_64"
+        ]
+      }
+    },
+    "engine_flags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

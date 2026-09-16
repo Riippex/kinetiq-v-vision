@@ -1,14 +1,18 @@
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
-import pytest
 
 from kinetiq_v_vision.bootstrap.container import Container
-from kinetiq_v_vision.domain.entities import CandidatePerson, Observation, RepetitionEvent
+from kinetiq_v_vision.domain.entities import (
+    CandidatePerson,
+    Observation,
+    RepetitionEvent,
+)
 from kinetiq_v_vision.domain.value_objects import (
     BoundingBox,
     ReasonCode,
@@ -70,7 +74,6 @@ def test_rest_analysis_lifecycle(
     assert status_resp.json()["analysis_id"] == analysis_id
 
     # 3. Add a candidate and get candidates
-    container: Container = client.app.dependency_overrides.get(None, None)  # type: ignore
     # Add candidate via repo directly to simulate detector discovery
     repo = client.app.dependency_overrides[
         list(client.app.dependency_overrides.keys())[4]
@@ -81,7 +84,7 @@ def test_rest_analysis_lifecycle(
             candidate_id="person_01",
             bbox=BoundingBox(0.2, 0.1, 0.6, 0.8),
             confidence=0.96,
-            detected_at=datetime.now(timezone.utc),
+            detected_at=datetime.now(UTC),
         )
     )
     repo.save(analysis)
@@ -112,7 +115,7 @@ def test_rest_analysis_lifecycle(
     assert sel_resp.json()["state"] == "TRACKING"
 
     # 6. Append observation and query observations
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     obs = Observation(
         session_id=analysis.session_id,
         epoch=1,

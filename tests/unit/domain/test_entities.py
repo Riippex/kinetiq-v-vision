@@ -1,10 +1,10 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 import pytest
 
 from kinetiq_v_vision.domain.entities import (
     Analysis,
     CandidatePerson,
-    Landmark,
     Observation,
     RepetitionEvent,
 )
@@ -48,7 +48,7 @@ def test_target_selection_and_stale_epoch_rejection() -> None:
         candidate_id="person_01",
         bbox=BoundingBox(0.1, 0.1, 0.5, 0.8),
         confidence=0.95,
-        detected_at=datetime.now(timezone.utc),
+        detected_at=datetime.now(UTC),
     )
     analysis.add_candidate(candidate)
 
@@ -91,7 +91,7 @@ def test_epoch_increment_and_sequence_monotonicity() -> None:
 
 
 def test_observation_validation() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     obs = Observation(
         session_id="session-123",
         epoch=1,
