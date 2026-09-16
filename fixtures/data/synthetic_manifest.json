@@ -1,0 +1,181 @@
+{
+  "manifest_version": "1.0.0",
+  "dataset_name": "kinetiq-v-vision-synthetic-ci",
+  "updated_at": "2026-09-15T20:00:00Z",
+  "clips": [
+    {
+      "clip_id": "fixture_squat_01",
+      "source_uri": "s3://kinetiq-vision-fixtures/synthetic/squat_01.mp4",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "participant_id": "synthetic-user-01",
+      "session_id": "session-synth-01",
+      "split": "development",
+      "exercise": "bodyweight_squat",
+      "perspective": "FRONTAL",
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "fps": 30.0,
+      "duration_seconds": 15.0,
+      "consent_scope": "synthetic-no-person",
+      "provenance": {
+        "source": "synthetic-fixture-generator",
+        "license": "Apache-2.0",
+        "collected_at": "2026-09-15T20:00:00Z",
+        "collector": "CI-pipeline"
+      },
+      "conditions": [
+        "clean_framing",
+        "bystander_crossing"
+      ],
+      "annotation_ref": "annotations/fixture_squat_01.json",
+      "annotation_version": "v1.0"
+    },
+    {
+      "clip_id": "fixture_pushup_01",
+      "source_uri": "s3://kinetiq-vision-fixtures/synthetic/pushup_01.mp4",
+      "sha256": "1123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "participant_id": "synthetic-user-01",
+      "session_id": "session-synth-01",
+      "split": "development",
+      "exercise": "push_up",
+      "perspective": "FLOOR_MAT",
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "fps": 30.0,
+      "duration_seconds": 20.0,
+      "consent_scope": "synthetic-no-person",
+      "provenance": {
+        "source": "synthetic-fixture-generator",
+        "license": "Apache-2.0",
+        "collected_at": "2026-09-15T20:00:00Z",
+        "collector": "CI-pipeline"
+      },
+      "conditions": [
+        "clean_framing",
+        "partial_occlusion"
+      ],
+      "annotation_ref": "annotations/fixture_pushup_01.json",
+      "annotation_version": "v1.0"
+    },
+    {
+      "clip_id": "fixture_plank_01",
+      "source_uri": "s3://kinetiq-vision-fixtures/synthetic/plank_01.mp4",
+      "sha256": "2123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "participant_id": "synthetic-user-02",
+      "session_id": "session-synth-02",
+      "split": "development",
+      "exercise": "plank",
+      "perspective": "FLOOR_MAT",
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "fps": 30.0,
+      "duration_seconds": 35.0,
+      "consent_scope": "synthetic-no-person",
+      "provenance": {
+        "source": "synthetic-fixture-generator",
+        "license": "Apache-2.0",
+        "collected_at": "2026-09-15T20:00:00Z",
+        "collector": "CI-pipeline"
+      },
+      "conditions": [
+        "clean_framing",
+        "pet_crossing"
+      ],
+      "annotation_ref": "annotations/fixture_plank_01.json",
+      "annotation_version": "v1.0"
+    },
+    {
+      "clip_id": "fixture_glute_01",
+      "source_uri": "s3://kinetiq-vision-fixtures/synthetic/glute_01.mp4",
+      "sha256": "3123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "participant_id": "synthetic-user-02",
+      "session_id": "session-synth-02",
+      "split": "development",
+      "exercise": "glute_bridge",
+      "perspective": "FLOOR_MAT",
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "fps": 30.0,
+      "duration_seconds": 25.0,
+      "consent_scope": "synthetic-no-person",
+      "provenance": {
+        "source": "synthetic-fixture-generator",
+        "license": "Apache-2.0",
+        "collected_at": "2026-09-15T20:00:00Z",
+        "collector": "CI-pipeline"
+      },
+      "conditions": [
+        "clean_framing",
+        "camera_motion"
+      ],
+      "annotation_ref": "annotations/fixture_glute_01.json",
+      "annotation_version": "v1.0"
+    },
+    {
+      "clip_id": "fixture_heldout_squat_01",
+      "source_uri": "s3://kinetiq-vision-fixtures/synthetic/heldout_squat_01.mp4",
+      "sha256": "4123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "participant_id": "synthetic-user-03",
+      "session_id": "session-synth-03",
+      "split": "heldout",
+      "exercise": "bodyweight_squat",
+      "perspective": "SAGITTAL_LEFT",
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "fps": 30.0,
+      "duration_seconds": 18.0,
+      "consent_scope": "synthetic-no-person",
+      "provenance": {
+        "source": "synthetic-fixture-generator",
+        "license": "Apache-2.0",
+        "collected_at": "2026-09-15T20:00:00Z",
+        "collector": "CI-pipeline"
+      },
+      "conditions": [
+        "clean_framing",
+        "stationary_bystander"
+      ],
+      "annotation_ref": "annotations/fixture_heldout_squat_01.json",
+      "annotation_version": "v1.0"
+    },
+    {
+      "clip_id": "fixture_heldout_plank_01",
+      "source_uri": "s3://kinetiq-vision-fixtures/synthetic/heldout_plank_01.mp4",
+      "sha256": "5123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "participant_id": "synthetic-user-03",
+      "session_id": "session-synth-03",
+      "split": "heldout",
+      "exercise": "plank",
+      "perspective": "FLOOR_MAT",
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "fps": 30.0,
+      "duration_seconds": 30.0,
+      "consent_scope": "synthetic-no-person",
+      "provenance": {
+        "source": "synthetic-fixture-generator",
+        "license": "Apache-2.0",
+        "collected_at": "2026-09-15T20:00:00Z",
+        "collector": "CI-pipeline"
+      },
+      "conditions": [
+        "clean_framing",
+        "dropped_frames"
+      ],
+      "annotation_ref": "annotations/fixture_heldout_plank_01.json",
+      "annotation_version": "v1.0"
+    }
+  ]
+}

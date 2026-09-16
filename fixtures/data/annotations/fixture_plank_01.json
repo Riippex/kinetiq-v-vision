@@ -1,0 +1,28 @@
+{
+  "clip_id": "fixture_plank_01",
+  "exercise": "plank",
+  "target_person_id": "synthetic-user-02",
+  "annotation_version": "v1.0",
+  "visibility_segments": [
+    {
+      "start_time": 0.0,
+      "end_time": 35.0,
+      "state": "FULL",
+      "reason": "OK"
+    }
+  ],
+  "distractor_events": [
+    {
+      "start_time": 12.0,
+      "end_time": 16.0,
+      "type": "pet_crossing"
+    }
+  ],
+  "hold": {
+    "start_time": 2.0,
+    "end_time": 32.0,
+    "duration_seconds": 30.0,
+    "valid": true,
+    "form_flags": []
+  }
+}

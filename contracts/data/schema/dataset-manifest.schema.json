@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kinetiq.ai/schemas/data/dataset-manifest.schema.json",
+  "title": "DatasetManifestV1",
+  "description": "Schema for Kinetiq V Vision dataset manifests defining video clips, participant splits, provenance, and condition taxonomy",
+  "type": "object",
+  "required": [
+    "manifest_version",
+    "dataset_name",
+    "updated_at",
+    "clips"
+  ],
+  "properties": {
+    "manifest_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$"
+    },
+    "dataset_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "clips": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "clip_id",
+          "source_uri",
+          "sha256",
+          "participant_id",
+          "session_id",
+          "split",
+          "exercise",
+          "perspective",
+          "resolution",
+          "fps",
+          "duration_seconds",
+          "consent_scope",
+          "provenance",
+          "conditions",
+          "annotation_ref",
+          "annotation_version"
+        ],
+        "properties": {
+          "clip_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "source_uri": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "participant_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "split": {
+            "type": "string",
+            "enum": [
+              "development",
+              "heldout"
+            ]
+          },
+          "exercise": {
+            "type": "string",
+            "enum": [
+              "bodyweight_squat",
+              "push_up",
+              "plank",
+              "glute_bridge"
+            ]
+          },
+          "perspective": {
+            "type": "string",
+            "enum": [
+              "FRONTAL",
+              "SAGITTAL_LEFT",
+              "SAGITTAL_RIGHT",
+              "FLOOR_MAT"
+            ]
+          },
+          "resolution": {
+            "type": "object",
+            "required": [
+              "width",
+              "height"
+            ],
+            "properties": {
+              "width": {
+                "type": "integer",
+                "minimum": 320
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 240
+              }
+            },
+            "additionalProperties": false
+          },
+          "fps": {
+            "type": "number",
+            "minimum": 1.0
+          },
+          "duration_seconds": {
+            "type": "number",
+            "minimum": 0.5
+          },
+          "consent_scope": {
+            "type": "string",
+            "enum": [
+              "authorized-internal",
+              "synthetic-no-person",
+              "public-research-licensed"
+            ]
+          },
+          "provenance": {
+            "type": "object",
+            "required": [
+              "source",
+              "license",
+              "collected_at"
+            ],
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "license": {
+                "type": "string"
+              },
+              "collected_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "collector": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "clean_framing",
+                "bystander_crossing",
+                "stationary_bystander",
+                "pet_crossing",
+                "partial_occlusion",
+                "camera_motion",
+                "dropped_frames",
+                "low_light",
+                "leaving_returning",
+                "similar_clothing"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "annotation_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "annotation_version": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 1
+    }
+  },
+  "additionalProperties": false
+}

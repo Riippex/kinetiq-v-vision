@@ -1,0 +1,22 @@
+{
+  "clip_id": "fixture_heldout_plank_01",
+  "exercise": "plank",
+  "target_person_id": "synthetic-user-03",
+  "annotation_version": "v1.0",
+  "visibility_segments": [
+    {
+      "start_time": 0.0,
+      "end_time": 30.0,
+      "state": "FULL",
+      "reason": "OK"
+    }
+  ],
+  "distractor_events": [],
+  "hold": {
+    "start_time": 1.0,
+    "end_time": 28.0,
+    "duration_seconds": 27.0,
+    "valid": true,
+    "form_flags": []
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "clip_id": "fixture_pushup_01",
+  "exercise": "push_up",
+  "target_person_id": "synthetic-user-01",
+  "annotation_version": "v1.0",
+  "visibility_segments": [
+    {
+      "start_time": 0.0,
+      "end_time": 10.0,
+      "state": "FULL",
+      "reason": "OK"
+    },
+    {
+      "start_time": 10.0,
+      "end_time": 13.0,
+      "state": "PARTIAL",
+      "reason": "OCCLUSION"
+    },
+    {
+      "start_time": 13.0,
+      "end_time": 20.0,
+      "state": "FULL",
+      "reason": "OK"
+    }
+  ],
+  "distractor_events": [],
+  "repetitions": [
+    {
+      "repetition_index": 1,
+      "start_time": 1.5,
+      "inflection_time": 3.0,
+      "end_time": 4.5,
+      "valid": true,
+      "form_flags": []
+    },
+    {
+      "repetition_index": 2,
+      "start_time": 5.0,
+      "inflection_time": 6.5,
+      "end_time": 8.0,
+      "valid": true,
+      "form_flags": []
+    },
+    {
+      "repetition_index": 3,
+      "start_time": 14.0,
+      "inflection_time": 15.5,
+      "end_time": 17.0,
+      "valid": true,
+      "form_flags": []
+    }
+  ]
+}

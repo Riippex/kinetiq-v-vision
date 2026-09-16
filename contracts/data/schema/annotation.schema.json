@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kinetiq.ai/schemas/data/annotation.schema.json",
+  "title": "DatasetAnnotationV1",
+  "description": "Schema for ground truth video annotations covering target visibility, distractors, repetitions, and isometric holds",
+  "type": "object",
+  "required": [
+    "clip_id",
+    "exercise",
+    "target_person_id",
+    "annotation_version",
+    "visibility_segments",
+    "distractor_events"
+  ],
+  "properties": {
+    "clip_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "exercise": {
+      "type": "string",
+      "enum": [
+        "bodyweight_squat",
+        "push_up",
+        "plank",
+        "glute_bridge"
+      ]
+    },
+    "target_person_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "annotation_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "visibility_segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "start_time",
+          "end_time",
+          "state",
+          "reason"
+        ],
+        "properties": {
+          "start_time": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "end_time": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "FULL",
+              "PARTIAL",
+              "OCCLUDED",
+              "ABSENT"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "TARGET_AMBIGUOUS",
+              "OCCLUSION",
+              "OUT_OF_FRAME",
+              "LOW_CONFIDENCE"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "distractor_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "start_time",
+          "end_time",
+          "type"
+        ],
+        "properties": {
+          "start_time": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "end_time": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "bystander_crossing",
+              "stationary_bystander",
+              "pet_crossing",
+              "background_motion"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "repetitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "repetition_index",
+          "start_time",
+          "inflection_time",
+          "end_time",
+          "valid"
+        ],
+        "properties": {
+          "repetition_index": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "start_time": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "inflection_time": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "end_time": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "form_flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "hold": {
+      "type": "object",
+      "required": [
+        "start_time",
+        "end_time",
+        "duration_seconds",
+        "valid"
+      ],
+      "properties": {
+        "start_time": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "end_time": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "valid": {
+          "type": "boolean"
+        },
+        "form_flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
