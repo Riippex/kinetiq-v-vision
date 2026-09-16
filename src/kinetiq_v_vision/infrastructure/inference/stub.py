@@ -29,7 +29,12 @@ class StubPersonDetectorAdapter(PersonDetectorPort):
 class StubPoseInferenceAdapter(PoseInferencePort):
     """Deterministic stub pose inference returning key landmarks."""
 
-    def infer_pose(self, frame: Any, candidate_id: str) -> list[Landmark]:
+    def infer_pose(
+        self,
+        frame: Any,
+        candidate_id: str,
+        candidate_bbox: BoundingBox | None = None,
+    ) -> list[Landmark]:
         return [
             Landmark(name="nose", x=0.5, y=0.15, confidence=0.98),
             Landmark(name="left_shoulder", x=0.45, y=0.25, confidence=0.96),

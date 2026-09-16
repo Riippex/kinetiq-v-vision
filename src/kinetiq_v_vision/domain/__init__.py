@@ -9,6 +9,7 @@ from kinetiq_v_vision.domain.entities import (
     CandidatePerson,
     HoldEvent,
     Landmark,
+    MediaFrame,
     Observation,
     RepetitionEvent,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "InvalidEpochError",
     "InvalidTargetError",
     "Landmark",
+    "MediaFrame",
     "Observation",
     "ReasonCode",
     "RepetitionEvent",

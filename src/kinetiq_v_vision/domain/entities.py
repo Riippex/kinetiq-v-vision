@@ -17,12 +17,26 @@ from kinetiq_v_vision.domain.value_objects import (
 )
 
 
+from typing import Any
+
+
 @dataclass(frozen=True)
 class Landmark:
     name: str
     x: float
     y: float
     confidence: float | None = None
+    z: float | None = None
+    visibility: float | None = None
+
+
+@dataclass(frozen=True)
+class MediaFrame:
+    frame_index: int
+    timestamp_ms: float
+    width: int
+    height: int
+    data: Any
 
 
 @dataclass(frozen=True)
