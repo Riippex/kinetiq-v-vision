@@ -19,6 +19,39 @@ def main(args: list[str] | None = None) -> int:
         "check", help="Verify engine runtime and configuration readiness"
     )
 
+    # Baseline benchmark command
+    baseline_parser = subparsers.add_parser(
+        "baseline", help="Run pose candidate baselines on a fixed split"
+    )
+    baseline_parser.add_argument(
+        "--manifest",
+        default=None,
+        help="Path to dataset manifest JSON (defaults to fixtures/data/synthetic_manifest.json)",
+    )
+    baseline_parser.add_argument(
+        "--split",
+        default="development",
+        choices=["development", "heldout"],
+        help="Dataset split to evaluate (default: development)",
+    )
+    baseline_parser.add_argument(
+        "--candidates",
+        nargs="+",
+        default=None,
+        help="Specific candidate IDs to benchmark (default: all)",
+    )
+    baseline_parser.add_argument(
+        "--max-frames",
+        type=int,
+        default=10,
+        help="Maximum frames per clip to evaluate (default: 10)",
+    )
+    baseline_parser.add_argument(
+        "--output",
+        default=None,
+        help="Optional path to write benchmark JSON report",
+    )
+
     parsed = parser.parse_args(args)
 
     if parsed.command == "run":
@@ -82,8 +115,42 @@ def main(args: list[str] | None = None) -> int:
         print("Kinetiq V Vision engine: ready.")
         return 0
 
+    if parsed.command == "baseline":
+        from pathlib import Path
+
+        from kinetiq_v_vision.evaluation.baselines import (
+            run_pose_baseline_benchmark,
+        )
+
+        repo_root = Path(__file__).resolve().parents[4]
+        default_manifest = (
+            repo_root / "fixtures" / "data" / "synthetic_manifest.json"
+        )
+        manifest_path = parsed.manifest or str(default_manifest)
+
+        try:
+            report = run_pose_baseline_benchmark(
+                manifest_path=manifest_path,
+                split=parsed.split,
+                selected_candidate_ids=parsed.candidates,
+                max_frames_per_clip=parsed.max_frames,
+            )
+            print(report.summary_markdown())
+
+            if parsed.output:
+                out_file = Path(parsed.output).resolve()
+                out_file.parent.mkdir(parents=True, exist_ok=True)
+                out_file.write_text(report.to_json(), encoding="utf-8")
+                print(f"\nReport saved to: {out_file}")
+
+            return 0
+        except Exception as e:
+            print(f"Error executing baseline benchmark: {e}", file=sys.stderr)
+            return 1
+
     parser.print_help()
     return 0
+
 
 
 if __name__ == "__main__":
