@@ -1,5 +1,9 @@
 # Kinetiq V Vision
 
+<p align="center">
+  <img src="docs/assets/branding/kinetiq-v-vision-logo.png" alt="Kinetiq V Vision" width="760">
+</p>
+
 A vision engine for session-specific person tracking and exercise movement analysis with OpenCV 5 and AWS.
 
 **Status:** architecture, initial REST/event contracts and an executable synthetic readiness notebook. No model benchmark or deployed inference service is claimed.
