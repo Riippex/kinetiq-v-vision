@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from kinetiq_v_vision.infrastructure.inference.manifest import (
     get_runtime_manifest_schema_path,
     load_model_manifest,
     load_runtime_manifest,
+    run_opencv_smoke_check,
     validate_model_manifest,
     validate_runtime_manifest,
     verify_artifact_sha256,
@@ -71,7 +73,8 @@ def test_load_and_validate_runtime_environment_manifest() -> None:
     assert manifest["environment_name"] == "kinetiq-v-vision-runtime"
     assert manifest["python_spec"]["min_version"] == "3.12.0"
     assert manifest["python_spec"]["max_exclusive_version"] == "3.14.0"
-    assert manifest["opencv_spec"]["min_version"] == "4.10.0"
+    assert manifest["opencv_spec"]["min_version"] == "5.0.0"
+    assert manifest["opencv_spec"]["required_major_version"] == 5
     assert "windows-x86_64" in manifest["supported_platforms"]
     assert "linux-x86_64" in manifest["supported_platforms"]
 
@@ -184,3 +187,64 @@ def test_cli_check_command(capsys: pytest.CaptureFixture[str]) -> None:
     assert "Model manifest person_detection_mediapipe_v1.json: valid." in captured.out
     assert "Model manifest pose_estimation_mediapipe_v1.json: valid." in captured.out
     assert "Kinetiq V Vision engine: ready." in captured.out
+
+
+def test_run_opencv_smoke_check_passes_with_installed_runtime() -> None:
+    """OpenCV 5 is pinned and installed; the smoke check must execute real image
+    processing rather than merely confirming that ``cv2`` imports."""
+    assert run_opencv_smoke_check() is None
+
+
+def test_run_opencv_smoke_check_reports_missing_cv2(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "cv2", None)
+    result = run_opencv_smoke_check()
+    assert result is not None
+    assert "OpenCV (cv2) is not installed" in result
+
+
+def test_check_runtime_compatibility_detects_missing_opencv(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reproduces the readiness bug where `check` reported success without OpenCV.
+
+    Simulates cv2 being absent even though it is installed in this test
+    environment, proving the compatibility check no longer silently skips it.
+    """
+    manifest_path = MANIFESTS_DIR / "runtime-environment.json"
+    manifest = load_runtime_manifest(manifest_path)
+
+    monkeypatch.setitem(sys.modules, "cv2", None)
+    errors = check_runtime_compatibility(manifest)
+    assert any("OpenCV (cv2) is not installed" in e for e in errors)
+
+
+def test_check_runtime_compatibility_detects_wrong_opencv_major_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import cv2
+
+    manifest_path = MANIFESTS_DIR / "runtime-environment.json"
+    manifest = load_runtime_manifest(manifest_path)
+
+    monkeypatch.setattr(cv2, "__version__", "4.10.0", raising=False)
+    errors = check_runtime_compatibility(manifest)
+    assert any(
+        "does not match required major version 5" in e for e in errors
+    )
+
+
+def test_cli_check_command_fails_without_opencv(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The `kinetiq-vision check` CLI must return a nonzero exit code when the
+    required OpenCV 5 runtime is unavailable, instead of reporting readiness."""
+    monkeypatch.setitem(sys.modules, "cv2", None)
+
+    exit_code = cli_main(["check"])
+
+    assert exit_code != 0
+    captured = capsys.readouterr()
+    assert "Runtime environment: compatible." not in captured.out
+    assert "Kinetiq V Vision engine: ready." not in captured.out

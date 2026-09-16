@@ -73,6 +73,8 @@
       "required": [
         "distribution",
         "min_version",
+        "pinned_version",
+        "required_major_version",
         "dnn_engine",
         "dnn_engine_id"
       ],
@@ -84,6 +86,16 @@
         "min_version": {
           "type": "string",
           "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+        },
+        "pinned_version": {
+          "type": "string",
+          "description": "Exact reproducible package version installed in production, as published on PyPI.",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+        },
+        "required_major_version": {
+          "type": "integer",
+          "description": "OpenCV major version that the installed cv2 runtime must report.",
+          "minimum": 1
         },
         "dnn_engine": {
           "type": "string",

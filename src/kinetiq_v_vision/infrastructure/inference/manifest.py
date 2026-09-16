@@ -199,4 +199,77 @@ def check_runtime_compatibility(runtime_manifest: dict[str, Any]) -> list[str]:
     except ImportError:
         errors.append("NumPy is not installed in the current environment")
 
+    # 4. OpenCV (cv2) runtime check
+    opencv_spec = runtime_manifest.get("opencv_spec", {})
+    required_major = opencv_spec.get("required_major_version")
+    try:
+        import cv2
+
+        installed_version = getattr(cv2, "__version__", "")
+        installed_parts = _parse_version(installed_version)
+        installed_major = installed_parts[0] if installed_parts else None
+
+        if required_major is not None and installed_major != required_major:
+            errors.append(
+                f"OpenCV version {installed_version or 'unknown'} does not match "
+                f"required major version {required_major}"
+            )
+
+        min_cv_str = opencv_spec.get("min_version")
+        if min_cv_str and installed_parts:
+            min_cv = _parse_version(min_cv_str)
+            if installed_parts < min_cv:
+                errors.append(
+                    f"OpenCV version {installed_version} is below minimum required {min_cv_str}"
+                )
+
+        smoke_error = run_opencv_smoke_check()
+        if smoke_error is not None:
+            errors.append(smoke_error)
+    except ImportError:
+        errors.append(
+            "OpenCV (cv2) is not installed in the current environment; "
+            f"required major version {required_major}"
+            if required_major is not None
+            else "OpenCV (cv2) is not installed in the current environment"
+        )
+
     return errors
+
+
+def run_opencv_smoke_check() -> str | None:
+    """Execute a minimal but substantive OpenCV operation to prove the installed
+    runtime actually performs image processing, not merely that ``cv2`` imports.
+
+    Suitable as a fast, dependency-free CI gate distinct from full inference tests.
+
+    Returns:
+        None if the smoke check executed successfully, otherwise a message
+        describing exactly why OpenCV could not be verified.
+    """
+    try:
+        import cv2
+        import numpy as np
+
+        frame = np.zeros((32, 32, 3), dtype=np.uint8)
+        frame[8:24, 8:24] = (255, 255, 255)
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        resized = cv2.resize(gray, (16, 16), interpolation=cv2.INTER_AREA)
+
+        if resized.shape != (16, 16):
+            return (
+                "OpenCV smoke check produced an unexpected output shape: "
+                f"{resized.shape}"
+            )
+        if int(resized.max()) == 0:
+            return (
+                "OpenCV smoke check produced an all-zero output; "
+                "image processing did not execute"
+            )
+    except ImportError as exc:
+        return f"OpenCV (cv2) is not installed in the current environment: {exc}"
+    except (cv2.error, RuntimeError, OSError, ValueError) as exc:
+        return f"OpenCV smoke check failed: {exc}"
+
+    return None

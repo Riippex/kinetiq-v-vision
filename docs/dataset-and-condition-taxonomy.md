@@ -2,15 +2,26 @@
 
 This specification defines the data contracts, split isolation rules, and condition taxonomy for Kinetiq V Vision research, baselines, and evaluation.
 
-## 1. Participant-Level Split Policy
+## 1. Participant- and Session-Level Split Policy
 
 To prevent data leakage across model baselines, tracking heuristics, and temporal parameter tuning:
 
 1. **Strict Participant Isolation**: A `participant_id` must exclusively belong to either the `development` split or the `heldout` split. Under no circumstances may clips from the same participant appear in both splits.
-2. **Deterministic Assignment**: Participant splits are assigned prior to any tuning and frozen in the dataset manifest.
-3. **Held-Out Protocol**:
+2. **Strict Session Isolation**: A `session_id` must independently belong to exactly one split, checked separately from `participant_id`. A recording session can leak evaluation signal across splits even if its clips were (incorrectly) attributed to different participant identifiers, so session isolation is never inferred from participant isolation alone.
+3. **Deterministic Assignment**: Participant and session splits are assigned prior to any tuning and frozen in the dataset manifest.
+4. **Required Exercise Coverage Per Split**: Every canonical exercise (`bodyweight_squat`, `push_up`, `plank`, `glute_bridge`) must have at least one clip in `development` and at least one clip in `heldout`. An exercise present in only one required split fails the dataset audit even if its total clip count is nonzero.
+5. **Held-Out Protocol**:
    - `development`: Used for exploratory data analysis (`01_dataset_audit.ipynb`), pose baseline comparisons (`02_pose_baselines.ipynb`), target tracking tuning (`03_target_tracking.ipynb`), and repetition/hold state machine design (`04_temporal_analysis.ipynb`).
    - `heldout`: Strictly reserved for frozen release evaluation (`05_heldout_evaluation.ipynb`) and release promotion review (`06_release_review.ipynb`). It is never used for parameter tuning.
+
+## 1a. Annotation Reference Integrity
+
+Each manifest clip's `annotation_ref` is the sole authoritative pointer to its ground-truth annotation:
+
+1. The path is resolved against the dataset root and must stay within it; references escaping the permitted root are rejected.
+2. The referenced file must exist. A missing file fails the audit for that clip — it is never treated as passable by falling back to a directory scan.
+3. The resolved annotation's own `clip_id` must equal the referencing clip's `clip_id`. A mismatch fails the audit even if some other file in the annotations directory happens to declare the expected `clip_id`.
+4. Duplicate `clip_id` values across manifest clips are rejected.
 
 ## 2. Condition Taxonomy
 

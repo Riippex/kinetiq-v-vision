@@ -1,7 +1,7 @@
 {
   "manifest_version": "1.0.0",
   "environment_name": "kinetiq-v-vision-runtime",
-  "updated_at": "2026-09-15T00:00:00Z",
+  "updated_at": "2026-09-15T21:00:00Z",
   "python_spec": {
     "min_version": "3.12.0",
     "max_exclusive_version": "3.14.0",
@@ -13,7 +13,9 @@
   },
   "opencv_spec": {
     "distribution": "opencv-python-headless",
-    "min_version": "4.10.0",
+    "min_version": "5.0.0",
+    "pinned_version": "5.0.0.93",
+    "required_major_version": 5,
     "dnn_engine": "onnx_runtime",
     "dnn_engine_id": 4
   },

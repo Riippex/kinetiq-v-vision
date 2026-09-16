@@ -46,42 +46,72 @@ def validate_manifest_schema(
 
 
 def audit_splits_and_participants(manifest_data: dict[str, Any]) -> dict[str, Any]:
-    """Audit participant distribution and strictly check for split leakage."""
+    """Audit participant and session distribution and strictly check for split leakage.
+
+    Isolation must hold for both `participant_id` and `session_id` independently:
+    a session can leak across splits even when the participant identifiers on the
+    clips have been (incorrectly) varied, so each identifier is tracked separately.
+    """
     clips = manifest_data.get("clips", [])
     participant_splits: dict[str, set[str]] = {}
+    session_splits: dict[str, set[str]] = {}
     clips_by_split: dict[str, int] = {"development": 0, "heldout": 0}
     participants_by_split: dict[str, set[str]] = {
+        "development": set(),
+        "heldout": set(),
+    }
+    sessions_by_split: dict[str, set[str]] = {
         "development": set(),
         "heldout": set(),
     }
 
     for clip in clips:
         p_id = clip.get("participant_id")
+        s_id = clip.get("session_id")
         split = clip.get("split")
         if p_id and split:
             participant_splits.setdefault(p_id, set()).add(split)
             if split in clips_by_split:
-                clips_by_split[split] += 1
                 participants_by_split[split].add(p_id)
+        if s_id and split:
+            session_splits.setdefault(s_id, set()).add(split)
+            if split in sessions_by_split:
+                sessions_by_split[split].add(s_id)
+        if split in clips_by_split:
+            clips_by_split[split] += 1
 
     leakage_participants = {
         p: splits for p, splits in participant_splits.items() if len(splits) > 1
     }
+    leakage_sessions = {
+        s: splits for s, splits in session_splits.items() if len(splits) > 1
+    }
 
     return {
-        "is_isolated": len(leakage_participants) == 0,
+        "is_isolated": len(leakage_participants) == 0 and len(leakage_sessions) == 0,
         "total_participants": len(participant_splits),
+        "total_sessions": len(session_splits),
         "total_clips": len(clips),
         "clips_by_split": clips_by_split,
         "participants_by_split": {
             k: sorted(v) for k, v in participants_by_split.items()
         },
+        "sessions_by_split": {k: sorted(v) for k, v in sessions_by_split.items()},
         "leakage_participants": leakage_participants,
+        "leakage_sessions": leakage_sessions,
     }
 
 
+REQUIRED_SPLITS = ("development", "heldout")
+
+
 def audit_exercise_coverage(manifest_data: dict[str, Any]) -> dict[str, Any]:
-    """Audit exercise representation across development and held-out splits."""
+    """Audit exercise representation across development and held-out splits.
+
+    Full coverage requires every canonical exercise to have at least one clip
+    in *every* required split, not merely a nonzero total across both splits
+    combined — an exercise with only development clips must fail the audit.
+    """
     clips = manifest_data.get("clips", [])
     coverage_matrix: dict[str, dict[str, int]] = {
         ex: {"development": 0, "heldout": 0, "total": 0}
@@ -103,12 +133,18 @@ def audit_exercise_coverage(manifest_data: dict[str, Any]) -> dict[str, Any]:
     missing_exercises = {
         ex for ex, counts in coverage_matrix.items() if counts["total"] == 0
     }
+    missing_split_coverage = {
+        ex: [s for s in REQUIRED_SPLITS if counts[s] == 0]
+        for ex, counts in coverage_matrix.items()
+        if any(counts[s] == 0 for s in REQUIRED_SPLITS)
+    }
 
     return {
         "matrix": coverage_matrix,
         "missing_canonical_exercises": sorted(missing_exercises),
+        "missing_split_coverage": missing_split_coverage,
         "unexpected_exercises": sorted(unexpected_exercises),
-        "has_full_coverage": len(missing_exercises) == 0,
+        "has_full_coverage": len(missing_split_coverage) == 0,
     }
 
 
@@ -130,6 +166,89 @@ def audit_condition_taxonomy(manifest_data: dict[str, Any]) -> dict[str, Any]:
         "condition_counts": condition_counts,
         "condition_by_exercise": condition_by_exercise,
         "total_tagged_conditions": sum(condition_counts.values()),
+    }
+
+
+def resolve_annotation_references(
+    manifest_data: dict[str, Any],
+    dataset_root: str | Path,
+) -> dict[str, Any]:
+    """Resolve each clip's `annotation_ref` to its authoritative annotation file.
+
+    Every annotation is loaded from the exact path its clip declares via
+    `annotation_ref`, resolved against `dataset_root`. This function never
+    substitutes a directory scan match: an annotation is accepted only when
+    the referenced path exists, stays within `dataset_root`, and its own
+    `clip_id` matches the referencing clip. Scanning the annotations
+    directory and matching by embedded `clip_id` previously let the audit
+    pass when `annotation_ref` pointed to a missing or wrong file, as long as
+    some other JSON in the directory happened to declare the expected
+    `clip_id`.
+    """
+    root = Path(dataset_root).resolve()
+    clips = manifest_data.get("clips", [])
+
+    clip_id_counts: dict[str, int] = {}
+    for clip in clips:
+        clip_id = clip.get("clip_id")
+        if clip_id:
+            clip_id_counts[clip_id] = clip_id_counts.get(clip_id, 0) + 1
+    duplicate_clip_ids = sorted(
+        clip_id for clip_id, count in clip_id_counts.items() if count > 1
+    )
+
+    resolved_annotations: dict[str, dict[str, Any]] = {}
+    reference_errors: list[str] = []
+
+    if duplicate_clip_ids:
+        reference_errors.extend(
+            f"duplicate clip_id '{clip_id}' declared by multiple manifest clips"
+            for clip_id in duplicate_clip_ids
+        )
+
+    for clip in clips:
+        clip_id = clip.get("clip_id")
+        ref = clip.get("annotation_ref")
+
+        if not ref:
+            reference_errors.append(f"{clip_id}: clip has no annotation_ref")
+            continue
+
+        candidate = (root / ref).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            reference_errors.append(
+                f"{clip_id}: annotation_ref '{ref}' resolves outside the "
+                f"permitted dataset root '{root}'"
+            )
+            continue
+
+        if not candidate.is_file():
+            reference_errors.append(
+                f"{clip_id}: annotation_ref '{ref}' does not resolve to an "
+                "existing annotation file"
+            )
+            continue
+
+        with open(candidate, encoding="utf-8") as f:
+            annotation_data = json.load(f)
+
+        annotation_clip_id = annotation_data.get("clip_id")
+        if annotation_clip_id != clip_id:
+            reference_errors.append(
+                f"{clip_id}: annotation_ref '{ref}' resolves to an annotation "
+                f"declaring clip_id '{annotation_clip_id}'"
+            )
+            continue
+
+        resolved_annotations[clip_id] = annotation_data
+
+    return {
+        "resolved_annotations": resolved_annotations,
+        "duplicate_clip_ids": duplicate_clip_ids,
+        "reference_errors": reference_errors,
+        "is_valid": len(reference_errors) == 0,
     }
 
 
@@ -237,6 +356,7 @@ class DatasetAuditReport:
     split_audit: dict[str, Any] = field(default_factory=dict)
     exercise_audit: dict[str, Any] = field(default_factory=dict)
     taxonomy_audit: dict[str, Any] = field(default_factory=dict)
+    reference_audit: dict[str, Any] = field(default_factory=dict)
     annotation_audit: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -245,6 +365,7 @@ class DatasetAuditReport:
             len(self.manifest_errors) == 0
             and self.split_audit.get("is_isolated", False)
             and self.exercise_audit.get("has_full_coverage", False)
+            and self.reference_audit.get("is_valid", False)
             and self.annotation_audit.get("is_valid", False)
         )
 
@@ -294,7 +415,21 @@ class DatasetAuditReport:
         lines.extend(
             [
                 "",
-                "## 4. Annotation Integrity",
+                "## 4. Annotation Reference Integrity",
+                f"- References Valid: {self.reference_audit.get('is_valid')}",
+                f"- Duplicate clip_id values: {len(self.reference_audit.get('duplicate_clip_ids', []))}",
+                f"- Reference Errors: {len(self.reference_audit.get('reference_errors', []))}",
+            ]
+        )
+        if self.reference_audit.get("reference_errors"):
+            lines.extend(
+                f"  - {err}" for err in self.reference_audit["reference_errors"]
+            )
+
+        lines.extend(
+            [
+                "",
+                "## 5. Annotation Timing Integrity",
                 f"- Valid Annotations: {self.annotation_audit.get('valid_count')} / {self.annotation_audit.get('total_clips')}",
                 f"- Missing Annotations: {len(self.annotation_audit.get('missing_annotations', []))}",
                 f"- Schema Errors: {len(self.annotation_audit.get('schema_errors', {}))}",
@@ -307,8 +442,14 @@ class DatasetAuditReport:
 
 def generate_dataset_audit_report(
     manifest_path: str | Path,
-    annotations_dir: str | Path | None = None,
+    dataset_root: str | Path | None = None,
 ) -> DatasetAuditReport:
+    """Run the full dataset governance audit for a manifest.
+
+    `dataset_root` bounds where `annotation_ref` paths may resolve to
+    (defaults to the manifest's own directory) and is the permitted root
+    used to reject references that escape it.
+    """
     manifest_p = Path(manifest_path)
     with open(manifest_p, encoding="utf-8") as f:
         manifest_data = json.load(f)
@@ -318,25 +459,19 @@ def generate_dataset_audit_report(
     exercise_audit = audit_exercise_coverage(manifest_data)
     taxonomy_audit = audit_condition_taxonomy(manifest_data)
 
-    annotations: dict[str, dict[str, Any]] = {}
-    if annotations_dir is None:
-        annotations_dir = manifest_p.parent / "annotations"
+    if dataset_root is None:
+        dataset_root = manifest_p.parent
 
-    ann_p = Path(annotations_dir)
-    if ann_p.exists():
-        for fpath in ann_p.glob("*.json"):
-            with open(fpath, encoding="utf-8") as f:
-                data = json.load(f)
-                clip_id = data.get("clip_id")
-                if clip_id:
-                    annotations[clip_id] = data
-
-    annotation_audit = audit_annotations(manifest_data, annotations)
+    reference_audit = resolve_annotation_references(manifest_data, dataset_root)
+    annotation_audit = audit_annotations(
+        manifest_data, reference_audit["resolved_annotations"]
+    )
 
     return DatasetAuditReport(
         manifest_errors=manifest_errors,
         split_audit=split_audit,
         exercise_audit=exercise_audit,
         taxonomy_audit=taxonomy_audit,
+        reference_audit=reference_audit,
         annotation_audit=annotation_audit,
     )

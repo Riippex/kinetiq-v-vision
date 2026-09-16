@@ -176,6 +176,64 @@
       ],
       "annotation_ref": "annotations/fixture_heldout_plank_01.json",
       "annotation_version": "v1.0"
+    },
+    {
+      "clip_id": "fixture_heldout_pushup_01",
+      "source_uri": "s3://kinetiq-vision-fixtures/synthetic/heldout_pushup_01.mp4",
+      "sha256": "6123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "participant_id": "synthetic-user-04",
+      "session_id": "session-synth-04",
+      "split": "heldout",
+      "exercise": "push_up",
+      "perspective": "FLOOR_MAT",
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "fps": 30.0,
+      "duration_seconds": 22.0,
+      "consent_scope": "synthetic-no-person",
+      "provenance": {
+        "source": "synthetic-fixture-generator",
+        "license": "Apache-2.0",
+        "collected_at": "2026-09-15T20:00:00Z",
+        "collector": "CI-pipeline"
+      },
+      "conditions": [
+        "clean_framing",
+        "low_light"
+      ],
+      "annotation_ref": "annotations/fixture_heldout_pushup_01.json",
+      "annotation_version": "v1.0"
+    },
+    {
+      "clip_id": "fixture_heldout_glute_01",
+      "source_uri": "s3://kinetiq-vision-fixtures/synthetic/heldout_glute_01.mp4",
+      "sha256": "7123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "participant_id": "synthetic-user-04",
+      "session_id": "session-synth-05",
+      "split": "heldout",
+      "exercise": "glute_bridge",
+      "perspective": "FLOOR_MAT",
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "fps": 30.0,
+      "duration_seconds": 24.0,
+      "consent_scope": "synthetic-no-person",
+      "provenance": {
+        "source": "synthetic-fixture-generator",
+        "license": "Apache-2.0",
+        "collected_at": "2026-09-15T20:00:00Z",
+        "collector": "CI-pipeline"
+      },
+      "conditions": [
+        "clean_framing",
+        "leaving_returning"
+      ],
+      "annotation_ref": "annotations/fixture_heldout_glute_01.json",
+      "annotation_version": "v1.0"
     }
   ]
 }
