@@ -61,7 +61,9 @@ def test_load_and_validate_pose_estimation_manifest() -> None:
     assert manifest["artifact"]["size_bytes"] == 5557238
     assert len(manifest["artifact"]["download_urls"]) >= 1
     assert manifest["upstream"]["license"] == "Apache-2.0"
-    assert manifest["preprocessing"]["input_shape"] == [1, 3, 256, 256]
+    # NHWC: the pose ONNX graph is channel-last, verified against upstream
+    # mp_pose.py `_preprocess` (blob[np.newaxis, :, :, :] with no transpose).
+    assert manifest["preprocessing"]["input_shape"] == [1, 256, 256, 3]
     assert manifest["postprocessing"]["landmark_count"] == 33
 
 

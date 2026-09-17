@@ -22,5 +22,6 @@ class PoseInferencePort(ABC):
         frame: MediaFrame | Any,
         candidate_id: str,
         candidate_bbox: BoundingBox | None = None,
+        candidate_keypoints: tuple[tuple[float, float], ...] | None = None,
     ) -> list[Landmark]:
         """Infer body landmarks for a confirmed person target."""

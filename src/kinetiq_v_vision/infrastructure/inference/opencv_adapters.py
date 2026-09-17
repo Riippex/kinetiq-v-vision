@@ -221,6 +221,15 @@ class OpenCVPersonDetectorAdapter(PersonDetectorPort):
         if len(keep_indices) == 0:
             return []
 
+        # Auxiliary keypoints (mid-hip, full-body, shoulder-center, upper-body),
+        # 4 points x 2 values in columns [4:12] of the raw box tensor -- present
+        # on the real model (verified: (1, 2254, 12)) but not guaranteed on
+        # mocked/simplified tensors in unit tests, hence the width guard.
+        sel_anchors = self.anchors[valid_indices]
+        has_keypoints = raw_boxes.shape[-1] >= 12
+        if has_keypoints:
+            landmark_delta = raw_boxes[valid_indices, 4:12]
+
         keep = np.array(keep_indices).flatten()
         candidates = []
 
@@ -228,12 +237,24 @@ class OpenCVPersonDetectorAdapter(PersonDetectorPort):
             box = pixel_boxes[k]
             score = float(filtered_scores[k])
             bbox = meta.unproject_box(box[0], box[1], box[2], box[3])
+
+            keypoints = None
+            if has_keypoints:
+                kp_deltas = landmark_delta[k].reshape(4, 2)
+                kp_px = (kp_deltas / 224.0 + sel_anchors[k]) * 224.0
+                kp_list = []
+                for px, py in kp_px:
+                    point = meta.unproject_box(px, py, px, py)
+                    kp_list.append((point.x, point.y))
+                keypoints = tuple(kp_list)
+
             candidates.append(
                 CandidatePerson(
                     candidate_id=f"candidate_{idx+1:02d}",
                     bbox=bbox,
                     confidence=round(score, 4),
                     detected_at=datetime.now(UTC),
+                    keypoints=keypoints,
                 )
             )
 
@@ -268,12 +289,13 @@ class OpenCVPoseInferenceAdapter(PoseInferencePort):
         frame: MediaFrame | Any,
         candidate_id: str,
         candidate_bbox: BoundingBox | None = None,
+        candidate_keypoints: tuple[tuple[float, float], ...] | None = None,
     ) -> list[Landmark]:
         """Infer 33 body landmarks for the specified candidate in [0.0, 1.0] normalized coordinates."""
         image = frame.data if isinstance(frame, MediaFrame) else frame
         bbox = candidate_bbox or BoundingBox(x=0.0, y=0.0, width=1.0, height=1.0)
 
-        blob, meta = self.preprocessor.preprocess(image, bbox)
+        blob, meta = self.preprocessor.preprocess(image, bbox, keypoints=candidate_keypoints)
 
         if self.forward_fn is not None:
             outputs = self.forward_fn(blob)
@@ -293,43 +315,53 @@ class OpenCVPoseInferenceAdapter(PoseInferencePort):
     ) -> list[Landmark]:
         """Decode raw pose tensors into 33 normalized body landmarks.
 
-        Only recognizes the flat-vector landmark layout documented below
-        (matching the golden decode fixtures). Some ONNX export variants of
-        this model emit heatmap-shaped landmark heads instead; rather than
-        guess at an incompatible layout, this safely reports no landmarks
-        for those outputs instead of crashing or fabricating coordinates.
+        The MediaPipe Pose ONNX graph (see model-manifests/
+        pose_estimation_mediapipe_v1.json and the verified upstream reference,
+        opencv_zoo models/pose_estimation_mediapipe/mp_pose.py commit
+        1f19f821d68288feff2ef5c53993b33da74b1509, `_postprocess`) emits 5
+        outputs in this order when unpacked from the ONNX graph directly:
+        `landmarks, conf, mask, heatmap, landmarks_word`. `net.forward()`'s
+        actual output order is NOT guaranteed to match that (already proven
+        false for the person detector model), so each tensor is identified by
+        its verified shape rather than its position:
+          - (1, 195):          landmarks -> reshape (39, 5): x, y, z,
+                                visibility_logit, presence_logit (sigmoid the
+                                last two columns).
+          - (1, 1):             conf, overall pose confidence, already a
+                                probability (no sigmoid, matches upstream).
+          - (1, 256, 256, 1):   mask, segmentation -- not part of the
+                                landmark contract, ignored here.
+          - (1, 64, 64, 39):    heatmap -- upstream: "currently only used for
+                                refining landmarks, requires sigmoid
+                                processing before use"; not required to
+                                decode the primary landmark contract.
+          - (1, 117):           landmarks_word, 3D world-space -- not part of
+                                the normalized 2D landmark contract, ignored.
         """
-        if not outputs or outputs[0] is None:
+        landmarks_tensor: np.ndarray | None = None
+        conf_tensor: np.ndarray | None = None
+        for out in outputs:
+            if out is None:
+                continue
+            if out.ndim == 2 and out.shape == (1, 195):
+                landmarks_tensor = out
+            elif out.ndim == 2 and out.shape == (1, 1):
+                conf_tensor = out
+
+        if landmarks_tensor is None:
             return []
 
-        # Find landmarks tensor
-        # MediaPipe Pose ONNX:
-        # Output 0: landmarks [1, 195] (39 keypoints x 5 values: x, y, z, vis, pres)
-        # Output 1: pose presence flag [1, 1]
-        landmarks_raw = outputs[0]
-
-        # Check pose confidence if present
-        if len(outputs) > 1 and outputs[1] is not None and outputs[1].size == 1:
-            overall_conf = float(outputs[1].ravel()[0])
+        if conf_tensor is not None:
+            overall_conf = float(conf_tensor.ravel()[0])
             if overall_conf < self.confidence_threshold:
                 return []
 
-        # Reshape to (N, 5) or (N, >=3); unrecognized layouts (e.g. heatmap
-        # outputs) fall through with landmarks_raw unchanged and are rejected
-        # by the shape check below.
-        if landmarks_raw.ndim == 3 and landmarks_raw.shape[0] == 1:
-            landmarks_raw = landmarks_raw[0]
-        elif landmarks_raw.ndim == 2 and landmarks_raw.shape[0] == 1:
-            # Flattened [1, 195] -> [39, 5]
-            if landmarks_raw.shape[1] == 195:
-                landmarks_raw = landmarks_raw.reshape(39, 5)
-            elif landmarks_raw.shape[1] == 33 * 5:
-                landmarks_raw = landmarks_raw.reshape(33, 5)
-            elif landmarks_raw.shape[1] == 33 * 3:
-                landmarks_raw = landmarks_raw.reshape(33, 3)
-
-        if landmarks_raw.ndim != 2 or landmarks_raw.shape[1] < 2:
-            return []
+        landmarks_raw = landmarks_tensor.reshape(39, 5).copy()
+        # Recover sigmoid score for visibility/presence logits (upstream
+        # mp_pose.py _postprocess: `landmarks[:, 3:] = 1 / (1 + exp(-...))`).
+        landmarks_raw[:, 3:] = 1.0 / (
+            1.0 + np.exp(-np.clip(landmarks_raw[:, 3:], -50.0, 50.0))
+        )
 
         num_points = min(len(MEDIAPIPE_POSE_LANDMARKS), landmarks_raw.shape[0])
         landmarks: list[Landmark] = []
@@ -338,34 +370,19 @@ class OpenCVPoseInferenceAdapter(PoseInferencePort):
             name = MEDIAPIPE_POSE_LANDMARKS[i]
             row = landmarks_raw[i]
 
-            # In MediaPipe, x and y can be in [0, 256] or normalized [0, 1]
+            # x, y are in [0, input_size] crop-pixel space per upstream.
             raw_x = float(row[0])
             raw_y = float(row[1])
-
-            # Normalize crop coordinates to [0.0, 1.0] if in [0, 256]
-            crop_norm_x = raw_x / 256.0 if raw_x > 1.0 else raw_x
-            crop_norm_y = raw_y / 256.0 if raw_y > 1.0 else raw_y
+            crop_norm_x = raw_x / 256.0 if abs(raw_x) > 1.0 else raw_x
+            crop_norm_y = raw_y / 256.0 if abs(raw_y) > 1.0 else raw_y
 
             # Unproject from crop to full frame [0.0, 1.0]
             norm_x, norm_y = meta.unproject_point(crop_norm_x, crop_norm_y)
 
-            # z (relative depth)
-            z_val = float(row[2]) if len(row) > 2 else 0.0
-
-            # visibility / presence
-            if len(row) >= 5:
-                vis_logit = float(row[3])
-                pres_logit = float(row[4])
-                vis = 1.0 / (1.0 + np.exp(-np.clip(vis_logit, -50.0, 50.0)))
-                pres = 1.0 / (1.0 + np.exp(-np.clip(pres_logit, -50.0, 50.0)))
-                conf = float(vis * pres)
-            elif len(row) >= 4:
-                vis_logit = float(row[3])
-                vis = 1.0 / (1.0 + np.exp(-np.clip(vis_logit, -50.0, 50.0)))
-                conf = float(vis)
-            else:
-                vis = 1.0
-                conf = 1.0
+            z_val = float(row[2])
+            vis = float(row[3])
+            pres = float(row[4])
+            conf = vis * pres
 
             landmarks.append(
                 Landmark(
@@ -374,7 +391,7 @@ class OpenCVPoseInferenceAdapter(PoseInferencePort):
                     y=norm_y,
                     confidence=round(float(conf), 4),
                     z=round(z_val, 4),
-                    visibility=round(float(vis), 4),
+                    visibility=round(vis, 4),
                 )
             )
 

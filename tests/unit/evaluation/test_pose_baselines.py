@@ -11,9 +11,13 @@ rather than forcing a coverage expectation the real model cannot honestly
 satisfy against non-person imagery.
 """
 
+import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
+import cv2
+import numpy as np
 import pytest
 
 from kinetiq_v_vision.evaluation.baselines import (
@@ -21,6 +25,7 @@ from kinetiq_v_vision.evaluation.baselines import (
     BenchmarkEnvironment,
     CandidateBenchmarkReport,
     CandidateMetrics,
+    MediaIntegrityError,
     create_candidate_pipelines,
     run_pose_baseline_benchmark,
 )
@@ -29,6 +34,59 @@ from kinetiq_v_vision.interfaces.cli.main import main as cli_main
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURES_DATA_DIR = REPO_ROOT / "fixtures" / "data"
 MANIFEST_PATH = FIXTURES_DATA_DIR / "synthetic_manifest.json"
+
+_STUB_PIPELINES: dict[str, tuple[str, Any]] = {
+    "noop": ("No-op Pipeline", lambda frame: (True, [])),
+}
+
+
+def _write_tiny_clip(path: Path) -> None:
+    """Write a minimal real 2-frame .mp4 so ControlledMediaSourceAdapter can
+    resolve and open it like an authorized clip."""
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter(str(path), fourcc, 10.0, (64, 64))
+    assert out.isOpened()
+    for color in [(10, 20, 30), (40, 50, 60)]:
+        out.write(np.full((64, 64, 3), color, dtype=np.uint8))
+    out.release()
+
+
+def _base_clip(clip_id: str, source_uri: str, sha256: str) -> dict[str, Any]:
+    return {
+        "clip_id": clip_id,
+        "source_uri": source_uri,
+        "sha256": sha256,
+        "participant_id": "synthetic-user-01",
+        "session_id": "session-integrity-01",
+        "split": "development",
+        "exercise": "bodyweight_squat",
+        "perspective": "FRONTAL",
+        "resolution": {"width": 1920, "height": 1080},
+        "fps": 30.0,
+        "duration_seconds": 1.0,
+        "consent_scope": "authorized-internal",
+        "provenance": {
+            "source": "unit-test",
+            "license": "Apache-2.0",
+            "collected_at": "2026-09-17T00:00:00Z",
+            "collector": "unit-test",
+        },
+        "conditions": ["clean_framing"],
+        "annotation_ref": "annotations/does_not_matter.json",
+        "annotation_version": "v1.0",
+    }
+
+
+def _write_manifest(tmp_path: Path, clips: list[dict[str, Any]]) -> Path:
+    manifest = {
+        "manifest_version": "1.0.0",
+        "dataset_name": "media-integrity-unit-test",
+        "updated_at": "2026-09-17T00:00:00Z",
+        "clips": clips,
+    }
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return manifest_path
 
 
 def test_benchmark_environment_capture() -> None:
@@ -283,3 +341,124 @@ def test_02_pose_baselines_notebook_file_is_valid() -> None:
     sources = "".join("".join(c["source"]) for c in nb_data["cells"])
     assert "run_pose_baseline_benchmark" in sources
     assert "summary_markdown" in sources
+
+
+# --- Media integrity: sha256 verification and basename-collision guard -----
+
+
+def test_run_pose_baseline_benchmark_accepts_clip_with_correct_sha256(
+    tmp_path: Path,
+) -> None:
+    media_dir = tmp_path / "media"
+    media_dir.mkdir()
+    clip_path = media_dir / "squat_01.mp4"
+    _write_tiny_clip(clip_path)
+    correct_sha256 = hashlib.sha256(clip_path.read_bytes()).hexdigest()
+
+    manifest_path = _write_manifest(
+        tmp_path,
+        [_base_clip("clip_ok", "s3://bucket/squat_01.mp4", correct_sha256)],
+    )
+
+    report = run_pose_baseline_benchmark(
+        manifest_path=manifest_path,
+        split="development",
+        max_frames_per_clip=1,
+        media_root=media_dir,
+        custom_pipelines=_STUB_PIPELINES,
+    )
+
+    assert report.total_clips_evaluated == 1
+    assert report.candidate_metrics["noop"].total_frames == 1
+
+
+def test_run_pose_baseline_benchmark_rejects_clip_with_incorrect_sha256(
+    tmp_path: Path,
+) -> None:
+    media_dir = tmp_path / "media"
+    media_dir.mkdir()
+    clip_path = media_dir / "squat_01.mp4"
+    _write_tiny_clip(clip_path)
+    wrong_sha256 = "f" * 64
+
+    manifest_path = _write_manifest(
+        tmp_path,
+        [_base_clip("clip_bad_hash", "s3://bucket/squat_01.mp4", wrong_sha256)],
+    )
+
+    with pytest.raises(MediaIntegrityError, match="does not match"):
+        run_pose_baseline_benchmark(
+            manifest_path=manifest_path,
+            split="development",
+            max_frames_per_clip=1,
+            media_root=media_dir,
+            custom_pipelines=_STUB_PIPELINES,
+        )
+
+
+def test_run_pose_baseline_benchmark_rejects_missing_clip_file_clearly(
+    tmp_path: Path,
+) -> None:
+    media_dir = tmp_path / "media"
+    media_dir.mkdir()
+    # No file written under media_dir for this clip.
+    manifest_path = _write_manifest(
+        tmp_path,
+        [_base_clip("clip_missing", "s3://bucket/never_uploaded.mp4", "a" * 64)],
+    )
+
+    with pytest.raises(AuthorizedMediaUnavailableError, match="clip_missing"):
+        run_pose_baseline_benchmark(
+            manifest_path=manifest_path,
+            split="development",
+            max_frames_per_clip=1,
+            media_root=media_dir,
+            custom_pipelines=_STUB_PIPELINES,
+        )
+
+
+def test_run_pose_baseline_benchmark_basename_collision_does_not_silently_swap_clips(
+    tmp_path: Path,
+) -> None:
+    """Two different clips whose source_uri basenames collide must not be
+    treated as interchangeable: only the local file matching the clip's own
+    pinned sha256 may be accepted, so a naming collision surfaces as an
+    integrity failure rather than silently benchmarking the wrong clip."""
+    media_dir = tmp_path / "media"
+    media_dir.mkdir()
+    clip_path = media_dir / "clip.mp4"
+    _write_tiny_clip(clip_path)
+    actual_sha256 = hashlib.sha256(clip_path.read_bytes()).hexdigest()
+
+    # clip_a's source_uri basename collides with clip_b's, but only one file
+    # is present on disk and its hash matches clip_a, not clip_b.
+    clip_a = _base_clip("clip_a", "s3://bucket-one/videos/clip.mp4", actual_sha256)
+    clip_b = _base_clip(
+        "clip_b", "s3://bucket-two/other/session/clip.mp4", "b" * 64
+    )
+    manifest_path = _write_manifest(tmp_path, [clip_a, clip_b])
+
+    with pytest.raises(MediaIntegrityError, match="clip_b"):
+        run_pose_baseline_benchmark(
+            manifest_path=manifest_path,
+            split="development",
+            max_frames_per_clip=1,
+            media_root=media_dir,
+            custom_pipelines=_STUB_PIPELINES,
+        )
+
+
+def test_synthetic_mode_never_checks_sha256_of_fabricated_clips() -> None:
+    """Synthetic clips have placeholder/fabricated sha256 values in the
+    manifest (they describe media that was never recorded); synthetic mode
+    must generate in-memory frames and must never attempt to verify a real
+    file's hash against them."""
+    report = run_pose_baseline_benchmark(
+        manifest_path=MANIFEST_PATH,
+        split="development",
+        max_frames_per_clip=1,
+        allow_synthetic=True,
+        custom_pipelines=_STUB_PIPELINES,
+    )
+    assert report.environment.is_synthetic is True
+    assert report.total_clips_evaluated == 4

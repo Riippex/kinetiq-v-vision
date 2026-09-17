@@ -62,6 +62,13 @@ class CandidatePerson:
     bbox: BoundingBox
     confidence: float
     detected_at: datetime
+    # Normalized [0.0, 1.0] full-frame auxiliary keypoints decoded from the
+    # detector's raw output, in upstream mp_persondet.py order: mid-hip,
+    # full-body point, shoulder-center, upper-body point. Used by pose
+    # preprocessing to size the person ROI (see PoseEstimationPreprocessor);
+    # None when the detector path does not expose them (e.g. stub, direct
+    # detections array).
+    keypoints: tuple[tuple[float, float], ...] | None = None
 
 
 @dataclass(frozen=True)

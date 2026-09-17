@@ -25,7 +25,10 @@ import numpy as np
 
 from kinetiq_v_vision.domain.entities import MediaFrame
 from kinetiq_v_vision.evaluation.audit import validate_manifest_schema
-from kinetiq_v_vision.infrastructure.inference.manifest import load_model_manifest
+from kinetiq_v_vision.infrastructure.inference.manifest import (
+    calculate_file_sha256,
+    load_model_manifest,
+)
 from kinetiq_v_vision.infrastructure.inference.model_downloader import (
     DEFAULT_WEIGHTS_DIR,
     resolve_model_artifact,
@@ -53,6 +56,17 @@ class AuthorizedMediaUnavailableError(RuntimeError):
     """Raised when the normal (non-synthetic) benchmark cannot resolve the
     authorized media a manifest clip references. Never silently substitutes
     synthetic frames for a real evaluation."""
+
+
+class MediaIntegrityError(AuthorizedMediaUnavailableError):
+    """Raised when a resolved local media file's content does not match the
+    manifest clip's pinned `sha256`. This is also the guard against basename
+    collision: `_derive_local_source_id` resolves a clip's local file by the
+    basename of its `source_uri`, so two different clips whose source URIs
+    happen to share a basename could otherwise silently resolve to the same
+    (wrong) file on disk. Since the on-disk file can match at most one
+    clip's pinned hash, a mismatch here always fails loudly instead of
+    silently benchmarking the wrong clip's content."""
 
 
 @dataclass(frozen=True)
@@ -256,7 +270,10 @@ def create_candidate_pipelines(
             return False, []
         target = candidates[0]
         landmarks = opencv_pose.infer_pose(
-            frame, candidate_id=target.candidate_id, candidate_bbox=target.bbox
+            frame,
+            candidate_id=target.candidate_id,
+            candidate_bbox=target.bbox,
+            candidate_keypoints=target.keypoints,
         )
         return True, landmarks
 
@@ -407,7 +424,7 @@ def run_pose_baseline_benchmark(
         else:
             source_id = _derive_local_source_id(clip["source_uri"])
             try:
-                media_adapter.resolve_source_path(source_id)
+                resolved_path = media_adapter.resolve_source_path(source_id)
             except (UnauthorizedSourceError, SourceNotFoundError) as exc:
                 raise AuthorizedMediaUnavailableError(
                     f"Clip '{clip_id}' references source_uri '{clip['source_uri']}' "
@@ -416,6 +433,19 @@ def run_pose_baseline_benchmark(
                     "Pass allow_synthetic=True to run mechanics-only synthetic "
                     "benchmarking instead of a real evaluation."
                 ) from exc
+
+            expected_sha256 = clip["sha256"].lower()
+            actual_sha256 = calculate_file_sha256(resolved_path)
+            if actual_sha256 != expected_sha256:
+                raise MediaIntegrityError(
+                    f"Clip '{clip_id}' resolved to local file '{resolved_path}' "
+                    f"(source_uri '{clip['source_uri']}'), but its content does not "
+                    f"match the manifest's pinned sha256 (expected {expected_sha256}, "
+                    f"got {actual_sha256}). This is refused rather than benchmarked: "
+                    "the file may be corrupt, stale, or -- since resolution is by "
+                    "source_uri basename -- an unrelated clip's file that happens to "
+                    "share the same basename."
+                )
             source_id_by_clip[clip_id] = source_id
 
     # Run benchmarks per candidate

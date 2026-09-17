@@ -89,7 +89,7 @@ def test_pose_estimation_preprocessor_shape_and_range(
     preprocessor = PoseEstimationPreprocessor(target_size=(256, 256), box_enlarge_factor=1.25)
     tensor, meta = preprocessor.preprocess(frame, bbox)
 
-    assert tensor.shape == (1, 3, 256, 256)
+    assert tensor.shape == (1, 256, 256, 3)
     assert tensor.dtype == np.float32
     assert 0.0 <= tensor.min() <= 1.0
     assert 0.0 <= tensor.max() <= 1.0
@@ -144,13 +144,13 @@ def test_pose_preprocessor_handles_boundary_candidates() -> None:
     # Candidate near top-left corner
     corner_bbox = BoundingBox(x=0.01, y=0.01, width=0.1, height=0.2)
     tensor, meta = preprocessor.preprocess(frame, corner_bbox)
-    assert tensor.shape == (1, 3, 256, 256)
+    assert tensor.shape == (1, 256, 256, 3)
     assert meta.roi_x1 < 0  # ROI extends past left border, padded with zeros
 
     # Candidate near bottom-right corner
     br_bbox = BoundingBox(x=0.9, y=0.85, width=0.1, height=0.15)
     tensor_br, _meta_br = preprocessor.preprocess(frame, br_bbox)
-    assert tensor_br.shape == (1, 3, 256, 256)
+    assert tensor_br.shape == (1, 256, 256, 3)
 
 
 def test_preprocessors_reject_invalid_inputs() -> None:

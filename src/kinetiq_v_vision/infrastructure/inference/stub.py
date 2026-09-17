@@ -34,6 +34,7 @@ class StubPoseInferenceAdapter(PoseInferencePort):
         frame: Any,
         candidate_id: str,
         candidate_bbox: BoundingBox | None = None,
+        candidate_keypoints: tuple[tuple[float, float], ...] | None = None,
     ) -> list[Landmark]:
         return [
             Landmark(name="nose", x=0.5, y=0.15, confidence=0.98),

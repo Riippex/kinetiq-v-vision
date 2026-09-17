@@ -154,11 +154,27 @@ class PersonDetectionPreprocessor:
 class PoseEstimationPreprocessor:
     """OpenCV 5 preprocessor for MediaPipe pose estimation.
 
-    Conforms to pose_estimation_mediapipe_v1.json:
-    - Target shape: [1, 3, 256, 256] (NCHW)
+    Conforms to pose_estimation_mediapipe_v1.json and the verified upstream
+    reference (opencv_zoo models/pose_estimation_mediapipe/mp_pose.py,
+    commit 1f19f821d68288feff2ef5c53993b33da74b1509, `_preprocess`):
+    - Target shape: [1, 256, 256, 3] (NHWC) -- the ONNX graph is channel-last.
+      Feeding it an NCHW tensor does not raise, but the internal reshape/slice
+      ops silently misalign, and the landmarks/conf/landmarks_word output
+      branches compute as None while mask/heatmap still resolve (observed
+      firsthand against the real weights). NHWC is required for the model to
+      produce landmarks at all.
     - Color format: RGB
     - Normalization: scale_to_zero_to_one ([0.0, 1.0])
     - Bounding box enlarge factor: 1.25
+
+    Known simplification vs. upstream: upstream also derives a rotation angle
+    from the detector's auxiliary keypoints (mid-hip, full-body point) so a
+    tilted person is un-rotated before inference. This preprocessor uses
+    those same keypoints (see `keypoints` param below) to size and center the
+    ROI exactly as upstream does, but does not rotate the crop -- it remains
+    axis-aligned. This affects pose accuracy for strongly tilted subjects,
+    not the tensor layout/semantics, which are verified against upstream
+    above.
     """
 
     def __init__(
@@ -170,9 +186,23 @@ class PoseEstimationPreprocessor:
         self.box_enlarge_factor = box_enlarge_factor
 
     def preprocess(
-        self, image: np.ndarray, bbox: BoundingBox
+        self,
+        image: np.ndarray,
+        bbox: BoundingBox,
+        keypoints: tuple[tuple[float, float], ...] | None = None,
     ) -> tuple[np.ndarray, RoiCropMetadata]:
-        """Crop and preprocess candidate ROI into an NCHW float32 tensor in [0.0, 1.0]."""
+        """Crop and preprocess candidate ROI into an NHWC float32 tensor in [0.0, 1.0].
+
+        When `keypoints` (mid-hip, full-body, ...; see CandidatePerson.keypoints)
+        are available, the ROI is centered on the mid-hip point and sized as
+        `2 * distance(mid_hip, full_body_point)`, matching upstream mp_pose.py
+        `_preprocess` with its default PERSON_BOX_PRE_ENLARGE_FACTOR=1 (no
+        rotation is applied -- see class docstring). Without keypoints (e.g. a
+        stub detector, or a bare bounding box) this falls back to the
+        bbox-center-and-enlarge approximation, which understates the ROI for
+        detector boxes that only tightly bound the torso -- verified to
+        materially lower model confidence on wide-limb poses.
+        """
         if not isinstance(image, np.ndarray) or image.ndim != 3 or image.shape[2] != 3:
             raise ValueError(f"Expected BGR image array with shape (H, W, 3), got {type(image)}")
 
@@ -180,15 +210,26 @@ class PoseEstimationPreprocessor:
         if orig_h == 0 or orig_w == 0:
             raise ValueError("Input image dimensions must be greater than zero.")
 
-        # Pixel bbox center and dimension
-        pixel_cx = (bbox.x + bbox.width / 2.0) * orig_w
-        pixel_cy = (bbox.y + bbox.height / 2.0) * orig_h
-        pixel_bw = bbox.width * orig_w
-        pixel_bh = bbox.height * orig_h
+        if keypoints is not None and len(keypoints) >= 2:
+            mid_hip_x, mid_hip_y = keypoints[0]
+            full_body_x, full_body_y = keypoints[1]
+            mid_hip_px = (mid_hip_x * orig_w, mid_hip_y * orig_h)
+            full_body_px = (full_body_x * orig_w, full_body_y * orig_h)
+            full_dist = float(
+                np.hypot(full_body_px[0] - mid_hip_px[0], full_body_px[1] - mid_hip_px[1])
+            )
+            pixel_cx, pixel_cy = mid_hip_px
+            roi_size = max(2.0 * full_dist, 1.0)
+        else:
+            # Pixel bbox center and dimension
+            pixel_cx = (bbox.x + bbox.width / 2.0) * orig_w
+            pixel_cy = (bbox.y + bbox.height / 2.0) * orig_h
+            pixel_bw = bbox.width * orig_w
+            pixel_bh = bbox.height * orig_h
 
-        # Square ROI enlarged by box_enlarge_factor (default 1.25)
-        raw_size = max(pixel_bw, pixel_bh, 1.0)
-        roi_size = raw_size * self.box_enlarge_factor
+            # Square ROI enlarged by box_enlarge_factor (default 1.25)
+            raw_size = max(pixel_bw, pixel_bh, 1.0)
+            roi_size = raw_size * self.box_enlarge_factor
 
         roi_x1 = pixel_cx - roi_size / 2.0
         roi_y1 = pixel_cy - roi_size / 2.0
@@ -231,9 +272,9 @@ class PoseEstimationPreprocessor:
         # Normalization: [0, 255] -> [0.0, 1.0]
         normalized = rgb.astype(np.float32) / 255.0
 
-        # HWC -> CHW -> NCHW
-        chw = np.transpose(normalized, (2, 0, 1))
-        nchw = np.ascontiguousarray(chw[np.newaxis, :, :, :], dtype=np.float32)
+        # HWC -> NHWC (channel-last; matches the ONNX graph's expected layout,
+        # unlike the person detector which is channel-first -- see class docstring)
+        nhwc = np.ascontiguousarray(normalized[np.newaxis, :, :, :], dtype=np.float32)
 
         meta = RoiCropMetadata(
             original_width=orig_w,
@@ -244,4 +285,4 @@ class PoseEstimationPreprocessor:
             target_size=self.target_width,
         )
 
-        return nchw, meta
+        return nhwc, meta
