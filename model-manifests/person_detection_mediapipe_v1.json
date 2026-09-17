@@ -15,7 +15,7 @@
     "filename": "person_detection_mediapipe_2023mar.onnx",
     "format": "onnx",
     "sha256": "47fd5599d6fa17608f03e0eb0ae230baa6e597d7e8a2c8199fe00abea55a701f",
-    "size_bytes": 1199015,
+    "size_bytes": 11990159,
     "download_urls": [
       "https://raw.githubusercontent.com/opencv/opencv_zoo/8e2b658d1007864a24cc2cf0e5b4288c74b32584/models/person_detection_mediapipe/person_detection_mediapipe_2023mar.onnx",
       "https://github.com/opencv/opencv_zoo/raw/main/models/person_detection_mediapipe/person_detection_mediapipe_2023mar.onnx",

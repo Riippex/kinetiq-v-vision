@@ -8,22 +8,28 @@ Implements benchmark protocol for stage 02:
 - Compares candidates on the fixed development protocol without fabricated metrics.
 """
 
-from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+import itertools
 import json
-from pathlib import Path
 import platform
 import sys
 import time
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import cv2
 import numpy as np
 
 from kinetiq_v_vision.domain.entities import MediaFrame
-from kinetiq_v_vision.domain.value_objects import BoundingBox
 from kinetiq_v_vision.evaluation.audit import validate_manifest_schema
+from kinetiq_v_vision.infrastructure.inference.manifest import load_model_manifest
+from kinetiq_v_vision.infrastructure.inference.model_downloader import (
+    DEFAULT_WEIGHTS_DIR,
+    resolve_model_artifact,
+)
 from kinetiq_v_vision.infrastructure.inference.opencv_adapters import (
     OpenCVPersonDetectorAdapter,
     OpenCVPoseInferenceAdapter,
@@ -32,12 +38,21 @@ from kinetiq_v_vision.infrastructure.inference.stub import (
     StubPersonDetectorAdapter,
     StubPoseInferenceAdapter,
 )
-from kinetiq_v_vision.infrastructure.media.controlled_media import (
+from kinetiq_v_vision.infrastructure.media import (
     ControlledMediaSourceAdapter,
+    SourceNotFoundError,
+    UnauthorizedSourceError,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 GOLDEN_FIXTURES_PATH = REPO_ROOT / "fixtures" / "golden" / "golden_fixtures.npz"
+MODEL_MANIFESTS_DIR = REPO_ROOT / "model-manifests"
+
+
+class AuthorizedMediaUnavailableError(RuntimeError):
+    """Raised when the normal (non-synthetic) benchmark cannot resolve the
+    authorized media a manifest clip references. Never silently substitutes
+    synthetic frames for a real evaluation."""
 
 
 @dataclass(frozen=True)
@@ -53,6 +68,7 @@ class BenchmarkEnvironment:
     timestamp_utc: str = field(
         default_factory=lambda: datetime.now(UTC).isoformat()
     )
+    is_synthetic: bool = False
 
 
 @dataclass
@@ -149,6 +165,16 @@ class CandidateBenchmarkReport:
         lines = [
             f"# Pose Baseline Benchmark Report: {self.split.upper()} Split",
             "",
+        ]
+        if self.environment.is_synthetic:
+            synthetic_warning = (
+                "> **SYNTHETIC MODE** — clip frames are synthetic (mechanics/latency "
+                "validation only). Coverage and confidence numbers below do NOT represent "
+                "real evaluation on authorized recorded movement and must never be reported "
+                "as such."
+            )
+            lines.extend(["> [!WARNING]", synthetic_warning, ""])
+        lines.extend([
             f"- **Manifest**: `{self.manifest_path}`",
             f"- **Clips Evaluated**: {self.total_clips_evaluated}",
             f"- **Platform**: `{self.environment.platform_system} {self.environment.platform_release} ({self.environment.platform_machine})`",
@@ -160,7 +186,7 @@ class CandidateBenchmarkReport:
             "",
             "| Candidate | Frames | Person Cov (%) | Pose Cov (%) | p50 Latency (ms) | p95 Latency (ms) | Throughput (FPS) | Mean Conf |",
             "|---|---:|---:|---:|---:|---:|---:|---:|",
-        ]
+        ])
 
         for cid, m in self.candidate_metrics.items():
             lines.append(
@@ -186,27 +212,41 @@ def _load_golden_tensors() -> dict[str, np.ndarray]:
         return {key: data[key] for key in data.files}
 
 
-def create_candidate_pipelines() -> dict[
-    str, tuple[str, Callable[[MediaFrame], tuple[bool, list[Any]]]]
-]:
+def create_candidate_pipelines(
+    weights_dir: Path | str = DEFAULT_WEIGHTS_DIR,
+) -> dict[str, tuple[str, Callable[[MediaFrame], tuple[bool, list[Any]]]]]:
     """Instantiate candidate detection + pose evaluation pipelines.
 
     Returns a mapping of candidate_id -> (candidate_name, pipeline_fn).
-    """
-    golden_tensors = _load_golden_tensors()
 
-    # Candidate 1: OpenCV MediaPipe pipeline using real OpenCV 5 preprocessors & decoders
-    box_delta = golden_tensors["detector_box_delta"]
-    score_logits = golden_tensors["detector_score_logits"]
-    raw_landmarks = golden_tensors["pose_landmarks"]
-    pose_presence = golden_tensors["pose_presence"]
+    The 'mediapipe_opencv' candidate downloads (if needed), verifies against
+    the pinned manifest's size and SHA-256, and loads the real ONNX weights
+    via `cv2.dnn.readNetFromONNX`, running genuine `net.forward()` inference
+    per frame. Golden/fixed tensors are never used here — they remain
+    reserved for the decode/preprocessing unit tests in
+    tests/unit/infrastructure/test_opencv_adapters.py, which exercise the
+    tensor-decoding logic in isolation from network/model availability.
+
+    Raises whatever `resolve_model_artifact` raises (see
+    `model_downloader.ModelArtifactUnavailableError`) if a pinned artifact
+    cannot be obtained and verified — never silently falls back to a mock.
+    """
+    person_manifest = load_model_manifest(
+        MODEL_MANIFESTS_DIR / "person_detection_mediapipe_v1.json"
+    )
+    pose_manifest = load_model_manifest(
+        MODEL_MANIFESTS_DIR / "pose_estimation_mediapipe_v1.json"
+    )
+
+    person_model_path = resolve_model_artifact(person_manifest, weights_dir=weights_dir)
+    pose_model_path = resolve_model_artifact(pose_manifest, weights_dir=weights_dir)
 
     opencv_detector = OpenCVPersonDetectorAdapter(
-        forward_fn=lambda blob: [box_delta, score_logits],
+        model_path=person_model_path,
         confidence_threshold=0.5,
     )
     opencv_pose = OpenCVPoseInferenceAdapter(
-        forward_fn=lambda blob: [raw_landmarks, pose_presence],
+        model_path=pose_model_path,
         confidence_threshold=0.5,
     )
 
@@ -271,6 +311,12 @@ def _create_synthetic_frames_for_clip(clip: dict[str, Any], count: int) -> list[
     return frames
 
 
+def _derive_local_source_id(source_uri: str) -> str:
+    """Map a manifest clip's `source_uri` (e.g. an s3:// URI) to the local,
+    media-root-relative filename an authorized copy is expected under."""
+    return Path(urlparse(source_uri).path).name
+
+
 def run_pose_baseline_benchmark(
     manifest_path: str | Path,
     split: str = "development",
@@ -278,6 +324,8 @@ def run_pose_baseline_benchmark(
     max_frames_per_clip: int | None = 10,
     warmup_frames: int = 2,
     custom_pipelines: dict[str, tuple[str, Callable[[MediaFrame], tuple[bool, list[Any]]]]] | None = None,
+    media_root: str | Path | None = None,
+    allow_synthetic: bool = False,
 ) -> CandidateBenchmarkReport:
     """Execute the pose baseline benchmark protocol on the specified split.
 
@@ -288,6 +336,20 @@ def run_pose_baseline_benchmark(
         max_frames_per_clip: Maximum number of frames per clip to evaluate.
         warmup_frames: Number of unmeasured warmup frames prior to recording latency.
         custom_pipelines: Optional dictionary of custom pipelines for extension/testing.
+        media_root: Directory authorized recorded clips are read from. Each
+            clip's `source_uri` basename must exist under this directory.
+            Required (and used) only when `allow_synthetic` is False.
+        allow_synthetic: When False (the default), every clip's authorized
+            media must resolve and be processed for real; a missing or
+            unauthorized source raises `AuthorizedMediaUnavailableError`
+            rather than silently falling back to synthetic frames. When
+            True, every evaluated clip must declare
+            `consent_scope: "synthetic-no-person"` and the benchmark
+            generates reproducible synthetic frames instead, explicitly
+            labeling the returned report as synthetic
+            (`report.environment.is_synthetic`). Synthetic mode validates
+            mechanics and model load/forward latency only — it never
+            substitutes for authorized held-out evaluation.
 
     Returns:
         CandidateBenchmarkReport containing hardware metadata and per-candidate metrics.
@@ -320,19 +382,41 @@ def run_pose_baseline_benchmark(
         for cid, (name, _) in pipelines.items()
     }
 
-    env = BenchmarkEnvironment()
-    media_adapter = ControlledMediaSourceAdapter()
+    env = BenchmarkEnvironment(is_synthetic=allow_synthetic)
+    media_adapter = ControlledMediaSourceAdapter(media_root=media_root)
 
-    # Pre-generate frame sequences for each clip
+    # Resolve exactly one source per clip: either a verified authorized
+    # local file (normal mode) or an explicitly-registered synthetic stream
+    # (opt-in mode only, and only for clips declared synthetic-no-person).
     frames_per_clip = max_frames_per_clip or 15
-    clip_frames_map: dict[str, list[MediaFrame]] = {}
+    source_id_by_clip: dict[str, str] = {}
 
     for clip in clips:
         clip_id = clip["clip_id"]
-        # If media root has actual file, use it; otherwise generate reproducible synthetic frames
-        frames = _create_synthetic_frames_for_clip(clip, count=frames_per_clip)
-        clip_frames_map[clip_id] = frames
-        media_adapter.register_synthetic_stream(clip_id, frames)
+        if allow_synthetic:
+            consent_scope = clip.get("consent_scope")
+            if consent_scope != "synthetic-no-person":
+                raise ValueError(
+                    f"Refusing synthetic mode for clip '{clip_id}': consent_scope "
+                    f"'{consent_scope}' is not 'synthetic-no-person'. Synthetic mode "
+                    "may only run against clips explicitly declared synthetic."
+                )
+            frames = _create_synthetic_frames_for_clip(clip, count=frames_per_clip)
+            media_adapter.register_synthetic_stream(clip_id, frames)
+            source_id_by_clip[clip_id] = clip_id
+        else:
+            source_id = _derive_local_source_id(clip["source_uri"])
+            try:
+                media_adapter.resolve_source_path(source_id)
+            except (UnauthorizedSourceError, SourceNotFoundError) as exc:
+                raise AuthorizedMediaUnavailableError(
+                    f"Clip '{clip_id}' references source_uri '{clip['source_uri']}' "
+                    f"(expected authorized local file '{source_id}' under "
+                    f"media_root={media_root!r}), but it is unavailable: {exc}. "
+                    "Pass allow_synthetic=True to run mechanics-only synthetic "
+                    "benchmarking instead of a real evaluation."
+                ) from exc
+            source_id_by_clip[clip_id] = source_id
 
     # Run benchmarks per candidate
     for cid, (name, pipeline_fn) in pipelines.items():
@@ -340,7 +424,13 @@ def run_pose_baseline_benchmark(
 
         for clip in clips:
             clip_id = clip["clip_id"]
-            frames = list(media_adapter.open_stream(clip_id))
+            source_id = source_id_by_clip[clip_id]
+            frame_stream = media_adapter.open_stream(source_id)
+            frames = list(
+                frame_stream
+                if allow_synthetic
+                else itertools.islice(frame_stream, max_frames_per_clip)
+            )
 
             # Warmup
             for w_idx in range(min(warmup_frames, len(frames))):

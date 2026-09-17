@@ -1,6 +1,7 @@
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 
 from kinetiq_v_vision.domain.exceptions import (
     InvalidEpochError,
@@ -15,9 +16,6 @@ from kinetiq_v_vision.domain.value_objects import (
     TrackingState,
     VisibilityState,
 )
-
-
-from typing import Any
 
 
 @dataclass(frozen=True)

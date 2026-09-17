@@ -2,10 +2,12 @@
 
 from kinetiq_v_vision.infrastructure.media.controlled_media import (
     ControlledMediaSourceAdapter,
+    SourceNotFoundError,
     UnauthorizedSourceError,
 )
 
 __all__ = [
     "ControlledMediaSourceAdapter",
+    "SourceNotFoundError",
     "UnauthorizedSourceError",
 ]

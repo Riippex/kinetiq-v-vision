@@ -51,6 +51,20 @@ def main(args: list[str] | None = None) -> int:
         default=None,
         help="Optional path to write benchmark JSON report",
     )
+    baseline_parser.add_argument(
+        "--media-root",
+        default=None,
+        help="Directory containing authorized recorded clips (required unless --synthetic)",
+    )
+    baseline_parser.add_argument(
+        "--synthetic",
+        action="store_true",
+        help=(
+            "Run mechanics-only synthetic benchmarking instead of a real evaluation. "
+            "Only permitted for clips declared consent_scope=synthetic-no-person; "
+            "results are labeled synthetic and never represent real coverage/latency."
+        ),
+    )
 
     parsed = parser.parse_args(args)
 
@@ -118,6 +132,8 @@ def main(args: list[str] | None = None) -> int:
     if parsed.command == "baseline":
         from pathlib import Path
 
+        import cv2
+
         from kinetiq_v_vision.evaluation.baselines import (
             run_pose_baseline_benchmark,
         )
@@ -134,6 +150,8 @@ def main(args: list[str] | None = None) -> int:
                 split=parsed.split,
                 selected_candidate_ids=parsed.candidates,
                 max_frames_per_clip=parsed.max_frames,
+                media_root=parsed.media_root,
+                allow_synthetic=parsed.synthetic,
             )
             print(report.summary_markdown())
 
@@ -144,7 +162,10 @@ def main(args: list[str] | None = None) -> int:
                 print(f"\nReport saved to: {out_file}")
 
             return 0
-        except Exception as e:
+        except (cv2.error, RuntimeError, OSError, ValueError, TypeError) as e:
+            # Covers FileNotFoundError/manifest and consent-scope ValueErrors,
+            # AuthorizedMediaUnavailableError and ModelArtifactUnavailableError
+            # (both RuntimeError subclasses), and native OpenCV DNN failures.
             print(f"Error executing baseline benchmark: {e}", file=sys.stderr)
             return 1
 

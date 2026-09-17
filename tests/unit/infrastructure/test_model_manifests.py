@@ -40,7 +40,7 @@ def test_load_and_validate_person_detection_manifest() -> None:
         manifest["artifact"]["sha256"]
         == "47fd5599d6fa17608f03e0eb0ae230baa6e597d7e8a2c8199fe00abea55a701f"
     )
-    assert manifest["artifact"]["size_bytes"] == 1199015
+    assert manifest["artifact"]["size_bytes"] == 11990159
     assert len(manifest["artifact"]["download_urls"]) >= 1
     assert manifest["upstream"]["license"] == "Apache-2.0"
     assert manifest["preprocessing"]["input_shape"] == [1, 3, 224, 224]

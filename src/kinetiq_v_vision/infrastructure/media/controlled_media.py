@@ -1,8 +1,9 @@
 """Controlled media source adapter for resolving and streaming authorized video frames."""
 
+import math
+import re
 from collections.abc import Iterator
 from pathlib import Path
-import re
 from typing import Any
 
 import cv2
@@ -122,7 +123,7 @@ class ControlledMediaSourceAdapter(FrameSourcePort):
         self._active_captures[source_id] = cap
 
         fps = cap.get(cv2.CAP_PROP_FPS)
-        if fps <= 0 or fps != fps:  # NaN check
+        if fps <= 0 or math.isnan(fps):
             fps = 30.0
 
         frame_interval_ms = 1000.0 / fps

@@ -1,10 +1,23 @@
-"""Unit tests for pose baseline evaluation module and CLI command."""
+"""Unit tests for pose baseline evaluation module and CLI command.
+
+The `mediapipe_opencv` candidate now downloads and loads real pinned ONNX
+weights (see `model_downloader.py`) instead of using golden/fixed tensors, so
+tests that exercise `create_candidate_pipelines()` or the full benchmark
+require network access on first run (the verified download is cached under
+`weights/` for subsequent runs). Synthetic fixtures contain no real person,
+so the real model's person/pose coverage on them is honestly 0% — these
+tests assert on genuine mechanics (frames processed, real positive latency)
+rather than forcing a coverage expectation the real model cannot honestly
+satisfy against non-person imagery.
+"""
 
 import json
 from pathlib import Path
+
 import pytest
 
 from kinetiq_v_vision.evaluation.baselines import (
+    AuthorizedMediaUnavailableError,
     BenchmarkEnvironment,
     CandidateBenchmarkReport,
     CandidateMetrics,
@@ -85,36 +98,51 @@ def test_candidate_benchmark_report_serialization(tmp_path: Path) -> None:
 
 
 def test_create_candidate_pipelines() -> None:
+    """Requires network access on first run to download+verify the pinned
+    ONNX weights (cached under weights/ afterward)."""
     pipelines = create_candidate_pipelines()
     assert "mediapipe_opencv" in pipelines
     assert "reference_stub" in pipelines
 
-    for cid, (name, fn) in pipelines.items():
+    for name, fn in pipelines.values():
         assert isinstance(name, str)
         assert callable(fn)
 
 
 def test_run_pose_baseline_benchmark_on_development_split() -> None:
+    """Synthetic mode must be explicit. The real `mediapipe_opencv` candidate
+    genuinely runs (real weights, real net.forward()), but the synthetic
+    fixture frames contain no real person, so person/pose coverage is
+    honestly 0% — this test asserts real mechanics (frames processed,
+    strictly positive latency), not a forced coverage expectation.
+    """
     report = run_pose_baseline_benchmark(
         manifest_path=MANIFEST_PATH,
         split="development",
         max_frames_per_clip=3,
         warmup_frames=1,
+        allow_synthetic=True,
     )
 
+    assert report.environment.is_synthetic is True
     assert report.total_clips_evaluated == 4
     assert len(report.candidate_metrics) == 2
     assert "mediapipe_opencv" in report.candidate_metrics
     assert "reference_stub" in report.candidate_metrics
 
-    for cid, m in report.candidate_metrics.items():
+    for m in report.candidate_metrics.values():
         assert m.total_frames == 12  # 4 clips * 3 frames
-        assert m.person_coverage_pct > 0.0
-        assert m.pose_coverage_pct > 0.0
+        assert 0.0 <= m.person_coverage_pct <= 100.0
+        assert 0.0 <= m.pose_coverage_pct <= 100.0
         assert m.p50_latency_ms > 0.0
         assert m.p95_latency_ms >= m.p50_latency_ms
         assert m.throughput_fps > 0.0
         assert 0.0 <= m.mean_landmark_confidence <= 1.0
+
+    # The deterministic stub is designed to always "detect" on any frame;
+    # the real model is proven to have actually run via its non-zero latency.
+    assert report.candidate_metrics["reference_stub"].person_coverage_pct == 100.0
+    assert report.candidate_metrics["mediapipe_opencv"].p50_latency_ms > 0.0
 
 
 def test_run_pose_baseline_benchmark_filters_candidates() -> None:
@@ -123,11 +151,44 @@ def test_run_pose_baseline_benchmark_filters_candidates() -> None:
         split="development",
         selected_candidate_ids=["reference_stub"],
         max_frames_per_clip=2,
+        allow_synthetic=True,
     )
 
     assert len(report.candidate_metrics) == 1
     assert "reference_stub" in report.candidate_metrics
     assert "mediapipe_opencv" not in report.candidate_metrics
+
+
+def test_run_pose_baseline_benchmark_requires_real_media_by_default() -> None:
+    """Regression test: the normal (non-synthetic) benchmark must resolve
+    and process real authorized clips, failing clearly rather than silently
+    substituting synthetic frames when the media is unavailable."""
+    with pytest.raises(AuthorizedMediaUnavailableError, match="fixture_squat_01"):
+        run_pose_baseline_benchmark(
+            manifest_path=MANIFEST_PATH,
+            split="development",
+            max_frames_per_clip=2,
+        )
+
+
+def test_run_pose_baseline_benchmark_rejects_synthetic_mode_for_real_consent_scope(
+    tmp_path: Path,
+) -> None:
+    """Regression test: synthetic mode must refuse to run against a clip that
+    is not explicitly declared synthetic-no-person, so it can never be used
+    to quietly fabricate results for what should be a real evaluation."""
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest["clips"][0]["consent_scope"] = "authorized-internal"
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="synthetic-no-person"):
+        run_pose_baseline_benchmark(
+            manifest_path=manifest_path,
+            split="development",
+            max_frames_per_clip=2,
+            allow_synthetic=True,
+        )
 
 
 def test_run_pose_baseline_benchmark_rejects_missing_manifest(tmp_path: Path) -> None:
@@ -153,12 +214,14 @@ def test_cli_baseline_command(capsys: pytest.CaptureFixture[str], tmp_path: Path
             "2",
             "--output",
             str(out_json),
+            "--synthetic",
         ]
     )
 
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "Pose Baseline Benchmark Report: DEVELOPMENT Split" in captured.out
+    assert "SYNTHETIC MODE" in captured.out
     assert "MediaPipe Pose (OpenCV 5 Runtime)" in captured.out
     assert out_json.is_file()
 
@@ -166,6 +229,30 @@ def test_cli_baseline_command(capsys: pytest.CaptureFixture[str], tmp_path: Path
         data = json.load(f)
         assert data["split"] == "development"
         assert "mediapipe_opencv" in data["candidates"]
+
+
+def test_cli_baseline_command_fails_clearly_without_synthetic_or_media(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Regression test: omitting --synthetic against fixtures with no
+    authorized local media must fail clearly, not silently synthesize
+    frames or crash with an unrelated traceback."""
+    exit_code = cli_main(
+        [
+            "baseline",
+            "--manifest",
+            str(MANIFEST_PATH),
+            "--split",
+            "development",
+            "--max-frames",
+            "2",
+        ]
+    )
+
+    assert exit_code != 0
+    captured = capsys.readouterr()
+    assert "Error executing baseline benchmark" in captured.err
+    assert "authorized" in captured.err.lower() or "unavailable" in captured.err.lower()
 
 
 def test_cli_baseline_command_fails_on_missing_file(

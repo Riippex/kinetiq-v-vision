@@ -1,9 +1,10 @@
 """Unit tests for ControlledMediaSourceAdapter."""
 
 from pathlib import Path
-import pytest
-import numpy as np
+
 import cv2
+import numpy as np
+import pytest
 
 from kinetiq_v_vision.domain.entities import MediaFrame
 from kinetiq_v_vision.infrastructure.media.controlled_media import (

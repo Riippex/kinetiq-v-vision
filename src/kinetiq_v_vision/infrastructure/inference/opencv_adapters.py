@@ -159,11 +159,22 @@ class OpenCVPersonDetectorAdapter(PersonDetectorPort):
                 )
             return candidates
 
-        # Case 2: MediaPipe Person Detection SSD outputs [box_delta, score_logits]
-        # output[0]: box delta (1, 2254, 16)
-        # output[1]: classification scores (1, 2254, 1)
-        raw_boxes = outputs[0]
-        raw_scores = outputs[1]
+        # Case 2: MediaPipe Person Detection SSD outputs a box-delta tensor and a
+        # classification-score tensor, e.g. (1, 2254, 12) and (1, 2254, 1).
+        # `net.forward()`'s output order is not guaranteed to match the ONNX
+        # graph's declared output order (observed: OpenCV 5 returns the score
+        # tensor first for this model), so identify each tensor by its last
+        # dimension rather than trusting output position.
+        first, second = outputs[0], outputs[1]
+        if first.shape[-1] == 1:
+            raw_scores, raw_boxes = first, second
+        elif second.shape[-1] == 1:
+            raw_boxes, raw_scores = first, second
+        else:
+            raise RuntimeError(
+                "Could not identify box-delta vs. score tensor from detector "
+                f"outputs with shapes {first.shape} and {second.shape}"
+            )
 
         if raw_scores.ndim == 3:
             raw_scores = raw_scores[0, :, 0]
@@ -280,8 +291,15 @@ class OpenCVPoseInferenceAdapter(PoseInferencePort):
     def _decode_pose(
         self, outputs: list[np.ndarray], meta: Any
     ) -> list[Landmark]:
-        """Decode raw pose tensors into 33 normalized body landmarks."""
-        if not outputs:
+        """Decode raw pose tensors into 33 normalized body landmarks.
+
+        Only recognizes the flat-vector landmark layout documented below
+        (matching the golden decode fixtures). Some ONNX export variants of
+        this model emit heatmap-shaped landmark heads instead; rather than
+        guess at an incompatible layout, this safely reports no landmarks
+        for those outputs instead of crashing or fabricating coordinates.
+        """
+        if not outputs or outputs[0] is None:
             return []
 
         # Find landmarks tensor
@@ -291,12 +309,14 @@ class OpenCVPoseInferenceAdapter(PoseInferencePort):
         landmarks_raw = outputs[0]
 
         # Check pose confidence if present
-        if len(outputs) > 1 and outputs[1].size == 1:
+        if len(outputs) > 1 and outputs[1] is not None and outputs[1].size == 1:
             overall_conf = float(outputs[1].ravel()[0])
             if overall_conf < self.confidence_threshold:
                 return []
 
-        # Reshape to (N, 5) or (N, >=3)
+        # Reshape to (N, 5) or (N, >=3); unrecognized layouts (e.g. heatmap
+        # outputs) fall through with landmarks_raw unchanged and are rejected
+        # by the shape check below.
         if landmarks_raw.ndim == 3 and landmarks_raw.shape[0] == 1:
             landmarks_raw = landmarks_raw[0]
         elif landmarks_raw.ndim == 2 and landmarks_raw.shape[0] == 1:
@@ -307,6 +327,9 @@ class OpenCVPoseInferenceAdapter(PoseInferencePort):
                 landmarks_raw = landmarks_raw.reshape(33, 5)
             elif landmarks_raw.shape[1] == 33 * 3:
                 landmarks_raw = landmarks_raw.reshape(33, 3)
+
+        if landmarks_raw.ndim != 2 or landmarks_raw.shape[1] < 2:
+            return []
 
         num_points = min(len(MEDIAPIPE_POSE_LANDMARKS), landmarks_raw.shape[0])
         landmarks: list[Landmark] = []

@@ -6,6 +6,7 @@ Implements preprocessing pipelines specified by:
 """
 
 from dataclasses import dataclass
+
 import cv2
 import numpy as np
 
@@ -107,8 +108,8 @@ class PersonDetectionPreprocessor:
 
         # 2. Scale ratio preserving aspect ratio
         ratio = min(self.target_height / orig_h, self.target_width / orig_w)
-        new_w = int(round(orig_w * ratio))
-        new_h = int(round(orig_h * ratio))
+        new_w = round(orig_w * ratio)
+        new_h = round(orig_h * ratio)
 
         resized = cv2.resize(rgb, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
 

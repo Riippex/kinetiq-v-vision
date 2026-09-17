@@ -1,6 +1,7 @@
 """Unit tests for OpenCV 5 preprocessing modules and golden tensor validation."""
 
 from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -65,7 +66,7 @@ def test_letterbox_metadata_unprojects_coordinates() -> None:
         target_height=224,
         scale_ratio=224.0 / 1920.0,
         pad_left=0,
-        pad_top=int(round((224 - 1080 * (224 / 1920)) / 2)),
+        pad_top=round((224 - 1080 * (224 / 1920)) / 2),
     )
 
     # A box in the middle of the letterbox area
@@ -148,7 +149,7 @@ def test_pose_preprocessor_handles_boundary_candidates() -> None:
 
     # Candidate near bottom-right corner
     br_bbox = BoundingBox(x=0.9, y=0.85, width=0.1, height=0.15)
-    tensor_br, meta_br = preprocessor.preprocess(frame, br_bbox)
+    tensor_br, _meta_br = preprocessor.preprocess(frame, br_bbox)
     assert tensor_br.shape == (1, 3, 256, 256)
 
 

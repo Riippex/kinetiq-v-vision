@@ -1,6 +1,7 @@
 """Unit tests for OpenCV 5 person detector and pose inference adapters."""
 
 from pathlib import Path
+
 import numpy as np
 import pytest
 

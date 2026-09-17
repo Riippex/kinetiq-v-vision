@@ -26,8 +26,8 @@ from kinetiq_v_vision.infrastructure.inference.stub import (
 )
 
 __all__ = [
-    "LetterboxMetadata",
     "MEDIAPIPE_POSE_LANDMARKS",
+    "LetterboxMetadata",
     "OpenCVPersonDetectorAdapter",
     "OpenCVPoseInferenceAdapter",
     "PersonDetectionPreprocessor",
