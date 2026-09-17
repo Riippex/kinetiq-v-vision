@@ -22,6 +22,13 @@ from kinetiq_v_vision.domain.exceptions import (
     StaleEpochError,
     TargetAmbiguousError,
 )
+from kinetiq_v_vision.domain.target_tracker import (
+    TargetTracker,
+    TargetTrackerConfig,
+    TargetTrackerResult,
+    calculate_centroid_distance,
+    calculate_iou,
+)
 from kinetiq_v_vision.domain.value_objects import (
     AnalysisState,
     BoundingBox,
@@ -50,6 +57,11 @@ __all__ = [
     "RepetitionEvent",
     "StaleEpochError",
     "TargetAmbiguousError",
+    "TargetTracker",
+    "TargetTrackerConfig",
+    "TargetTrackerResult",
     "TrackingState",
     "VisibilityState",
+    "calculate_centroid_distance",
+    "calculate_iou",
 ]

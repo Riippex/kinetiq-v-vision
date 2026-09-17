@@ -6,6 +6,7 @@ from kinetiq_v_vision.application.ports.inference import (
 )
 from kinetiq_v_vision.application.ports.media import FrameSourcePort
 from kinetiq_v_vision.application.ports.state import AnalysisRepositoryPort
+from kinetiq_v_vision.application.ports.target_tracker_port import TargetTrackerPort
 from kinetiq_v_vision.application.ports.telemetry import TelemetryPort
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "FrameSourcePort",
     "PersonDetectorPort",
     "PoseInferencePort",
+    "TargetTrackerPort",
     "TelemetryPort",
 ]

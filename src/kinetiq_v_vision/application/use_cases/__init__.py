@@ -6,10 +6,16 @@ from kinetiq_v_vision.application.use_cases.poll_observations import (
 )
 from kinetiq_v_vision.application.use_cases.select_target import SelectTargetUseCase
 from kinetiq_v_vision.application.use_cases.stop_analysis import StopAnalysisUseCase
+from kinetiq_v_vision.application.use_cases.track_target import (
+    TrackTargetCommand,
+    TrackTargetUseCase,
+)
 
 __all__ = [
     "CreateAnalysisUseCase",
     "PollObservationsUseCase",
     "SelectTargetUseCase",
     "StopAnalysisUseCase",
+    "TrackTargetCommand",
+    "TrackTargetUseCase",
 ]

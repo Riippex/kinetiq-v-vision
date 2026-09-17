@@ -90,6 +90,31 @@ def test_epoch_increment_and_sequence_monotonicity() -> None:
     assert new_seq1 == 1
 
 
+def test_increment_epoch_clears_target_to_force_reconfirmation() -> None:
+    """A stream restart must not let tracking silently resume against a
+    target that was never reconfirmed for the new epoch."""
+    analysis = Analysis(
+        session_id="session-123",
+        source_id="camera-front",
+        exercise_key=ExerciseKey.PLANK,
+    )
+    candidate = CandidatePerson(
+        candidate_id="person_01",
+        bbox=BoundingBox(0.1, 0.1, 0.5, 0.8),
+        confidence=0.95,
+        detected_at=datetime.now(UTC),
+    )
+    analysis.add_candidate(candidate)
+    analysis.select_target(candidate_id="person_01", expected_epoch=1)
+    assert analysis.target_person_id == "person_01"
+    assert analysis.state == AnalysisState.TRACKING
+
+    analysis.increment_epoch()
+
+    assert analysis.target_person_id is None
+    assert analysis.state == AnalysisState.AWAITING_SELECTION
+
+
 def test_observation_validation() -> None:
     now = datetime.now(UTC)
     obs = Observation(

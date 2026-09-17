@@ -85,6 +85,14 @@ class Observation:
     reason_code: ReasonCode
     repetitions: list[RepetitionEvent] | None = None
     hold: HoldEvent | None = None
+    # The candidate_id the tracker actually spatially associated this frame
+    # with (TargetTrackerResult.target_candidate.candidate_id), independent
+    # of `target_person_id` (the enrolled/ground-truth target). These can
+    # differ -- e.g. a silent spatial reassociation onto a bystander -- and
+    # collapsing them into one field is what let VV-402's evaluation report
+    # zero target switches unconditionally. None when no candidate was
+    # associated this frame (SEARCHING/LOST/AMBIGUOUS).
+    associated_candidate_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.epoch < 1:
@@ -131,10 +139,18 @@ class Analysis:
         self.last_valid_at = datetime.now(UTC)
 
     def increment_epoch(self) -> int:
-        """Advance epoch on stream restart, reconnection, or re-targeting."""
+        """Advance epoch on stream restart, reconnection, or re-targeting.
+
+        Clears `target_person_id` so a restarted stream cannot resume
+        tracking against a target that was never reconfirmed for the new
+        epoch: `TrackTargetUseCase` requires `target_person_id` to be set,
+        so this alone forces an explicit `select_target` call before
+        tracking can proceed again.
+        """
         self.epoch += 1
         self.sequence_counter = 0
         self.state = AnalysisState.AWAITING_SELECTION
+        self.target_person_id = None
         return self.epoch
 
     def next_sequence(self) -> int:

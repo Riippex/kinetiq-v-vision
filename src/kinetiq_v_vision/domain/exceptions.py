@@ -34,6 +34,20 @@ class TargetAmbiguousError(DomainError):
         super().__init__(message)
 
 
+class AnalysisNotTrackingError(DomainError):
+    """Raised when frame tracking is attempted while the analysis is not in
+    the TRACKING state (e.g. after a stream restart cleared the target and
+    reset the analysis to AWAITING_SELECTION, or the analysis is PAUSED)."""
+
+    def __init__(self, analysis_id: str, current_state: str) -> None:
+        super().__init__(
+            f"Analysis '{analysis_id}' is not in TRACKING state (current: {current_state}); "
+            "target must be (re)confirmed via select_target before tracking can proceed"
+        )
+        self.analysis_id = analysis_id
+        self.current_state = current_state
+
+
 class CursorExpiredError(DomainError):
     def __init__(self, requested_cursor: str, oldest_cursor: str | None = None) -> None:
         super().__init__(
