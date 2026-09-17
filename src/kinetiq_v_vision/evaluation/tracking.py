@@ -185,14 +185,16 @@ def create_bystander_only_reassociation_scenario() -> TrackingScenario:
     replaced by a bystander at nearly the same position for every remaining
     frame -- the true target never reappears.
 
-    This is not a hypothetical: `TargetTracker.process_frame`'s spatial
-    fallback (used whenever there is no direct candidate_id match) scores
-    candidates purely by IoU/centroid distance against `last_known_bbox`,
-    with no check that the best-scoring candidate shares any identity with
-    the enrolled target. A same-position bystander therefore reaches
-    CONFIRMED under a *different* candidate_id -- a real, currently
-    unfixed silent target switch, reproduced deterministically here rather
-    than asserted about in the abstract.
+    This was not a hypothetical: `TargetTracker.process_frame`'s spatial
+    fallback (used whenever there is no direct candidate_id match) used to
+    score candidates purely by IoU/centroid distance against
+    `last_known_bbox`, with no check that the best-scoring candidate shared
+    any identity with the enrolled target, so a same-position bystander
+    reached CONFIRMED under a *different* candidate_id -- a real silent
+    target switch, reproduced deterministically here. The spatial fallback
+    now never promotes a non-ID-matching candidate past AMBIGUOUS (see
+    `TargetTracker.process_frame`'s step 3), so this scenario is kept as a
+    standing regression guard: it must remain switch-free.
     """
     base_time = datetime(2026, 9, 17, 12, 0, 0, tzinfo=UTC)
     target_id = "user_primary"

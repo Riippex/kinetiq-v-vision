@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from kinetiq_v_vision.domain.exceptions import (
     AnalysisNotFoundError,
     CursorExpiredError,
+    IdempotencyConflictError,
     InvalidEpochError,
     InvalidTargetError,
     StaleEpochError,
@@ -102,6 +103,24 @@ def create_app() -> FastAPI:
                     "correlation_id": corr_id,
                     "retryable": False,
                     "details": {"candidate_id": exc.candidate_id},
+                }
+            },
+        )
+
+    @app.exception_handler(IdempotencyConflictError)
+    async def idempotency_conflict_handler(
+        request: Request, exc: IdempotencyConflictError
+    ) -> JSONResponse:
+        corr_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": str(exc),
+                    "correlation_id": corr_id,
+                    "retryable": False,
+                    "details": {"idempotency_key": exc.idempotency_key},
                 }
             },
         )

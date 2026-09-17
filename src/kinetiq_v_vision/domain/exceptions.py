@@ -55,3 +55,18 @@ class CursorExpiredError(DomainError):
         )
         self.requested_cursor = requested_cursor
         self.oldest_cursor = oldest_cursor
+
+
+class IdempotencyConflictError(DomainError):
+    """Raised when an idempotency_key is reused with a different request
+    fingerprint (session_id/source_id/exercise_key/exercise_version) than
+    the request that originally claimed it -- the key does not uniquely
+    identify a single logical request, so replaying it is refused rather
+    than silently creating a second analysis or overwriting the first."""
+
+    def __init__(self, idempotency_key: str) -> None:
+        super().__init__(
+            f"Idempotency key '{idempotency_key}' was already used for a request "
+            "with different parameters"
+        )
+        self.idempotency_key = idempotency_key

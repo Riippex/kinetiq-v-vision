@@ -18,6 +18,7 @@ from kinetiq_v_vision.application.use_cases.stop_analysis import StopAnalysisUse
 from kinetiq_v_vision.domain.entities import CandidatePerson, Observation
 from kinetiq_v_vision.domain.exceptions import (
     CursorExpiredError,
+    IdempotencyConflictError,
     StaleEpochError,
 )
 from kinetiq_v_vision.domain.value_objects import (
@@ -179,3 +180,86 @@ def test_stop_analysis_releases_resources() -> None:
     retrieved = repo.get_by_id(analysis.analysis_id)
     assert retrieved is not None
     assert retrieved.state == AnalysisState.STOPPED
+
+
+def test_create_analysis_is_idempotent_on_key_with_matching_request() -> None:
+    repo = InMemoryAnalysisRepository()
+    telemetry = LoggingTelemetryAdapter()
+    create_uc = CreateAnalysisUseCase(repo, telemetry)
+
+    cmd = CreateAnalysisCommand(
+        session_id="session-idem-1",
+        source_id="camera-front",
+        exercise_key="push_up",
+        exercise_version=1,
+        idempotency_key="idem-key-1",
+    )
+
+    first = create_uc.execute(cmd)
+    second = create_uc.execute(cmd)
+
+    assert first.analysis_id == second.analysis_id
+
+
+def test_create_analysis_rejects_key_reuse_with_different_request() -> None:
+    repo = InMemoryAnalysisRepository()
+    telemetry = LoggingTelemetryAdapter()
+    create_uc = CreateAnalysisUseCase(repo, telemetry)
+
+    create_uc.execute(
+        CreateAnalysisCommand(
+            session_id="session-idem-2",
+            source_id="camera-front",
+            exercise_key="push_up",
+            idempotency_key="idem-key-2",
+        )
+    )
+
+    # Same key, different exercise_key -- a genuinely different request.
+    with pytest.raises(IdempotencyConflictError, match="idem-key-2"):
+        create_uc.execute(
+            CreateAnalysisCommand(
+                session_id="session-idem-2",
+                source_id="camera-front",
+                exercise_key="plank",
+                idempotency_key="idem-key-2",
+            )
+        )
+
+
+def test_create_analysis_without_key_always_creates_new() -> None:
+    repo = InMemoryAnalysisRepository()
+    telemetry = LoggingTelemetryAdapter()
+    create_uc = CreateAnalysisUseCase(repo, telemetry)
+
+    cmd = CreateAnalysisCommand(
+        session_id="session-idem-3",
+        source_id="camera-front",
+        exercise_key="glute_bridge",
+    )
+
+    first = create_uc.execute(cmd)
+    second = create_uc.execute(cmd)
+
+    assert first.analysis_id != second.analysis_id
+
+
+def test_create_analysis_idempotent_replay_resolves_after_resave() -> None:
+    """If the recorded analysis was deleted (e.g. stopped and reaped) but
+    the idempotency receipt survives, a replay recreates it under the same
+    key/fingerprint rather than raising or resolving to a missing record."""
+    repo = InMemoryAnalysisRepository()
+    telemetry = LoggingTelemetryAdapter()
+    create_uc = CreateAnalysisUseCase(repo, telemetry)
+
+    cmd = CreateAnalysisCommand(
+        session_id="session-idem-4",
+        source_id="camera-front",
+        exercise_key="bodyweight_squat",
+        idempotency_key="idem-key-4",
+    )
+    first = create_uc.execute(cmd)
+    repo.delete(first.analysis_id)
+
+    second = create_uc.execute(cmd)
+    assert repo.get_by_id(second.analysis_id) is not None

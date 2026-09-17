@@ -1,9 +1,13 @@
 import threading
 from collections import deque
+from collections.abc import Callable
 
 from kinetiq_v_vision.application.ports.state import AnalysisRepositoryPort
 from kinetiq_v_vision.domain.entities import Analysis, Observation
-from kinetiq_v_vision.domain.exceptions import CursorExpiredError
+from kinetiq_v_vision.domain.exceptions import (
+    CursorExpiredError,
+    IdempotencyConflictError,
+)
 
 
 class InMemoryAnalysisRepository(AnalysisRepositoryPort):
@@ -15,14 +19,47 @@ class InMemoryAnalysisRepository(AnalysisRepositoryPort):
         self._analyses: dict[str, Analysis] = {}
         self._buffers: dict[str, deque[Observation]] = {}
         self._oldest_seen: dict[str, str] = {}
+        # idempotency_key -> (analysis_id, request_fingerprint)
+        self._idempotency_keys: dict[str, tuple[str, str]] = {}
 
     def save(self, analysis: Analysis) -> None:
         with self._lock:
-            self._analyses[analysis.analysis_id] = analysis
-            if analysis.analysis_id not in self._buffers:
-                self._buffers[analysis.analysis_id] = deque(
-                    maxlen=self._buffer_capacity
+            self._save_locked(analysis)
+
+    def _save_locked(self, analysis: Analysis) -> None:
+        self._analyses[analysis.analysis_id] = analysis
+        if analysis.analysis_id not in self._buffers:
+            self._buffers[analysis.analysis_id] = deque(maxlen=self._buffer_capacity)
+
+    def create_or_get_by_idempotency_key(
+        self,
+        *,
+        idempotency_key: str | None,
+        request_fingerprint: str,
+        factory: Callable[[], Analysis],
+    ) -> Analysis:
+        with self._lock:
+            if idempotency_key:
+                existing = self._idempotency_keys.get(idempotency_key)
+                if existing is not None:
+                    existing_analysis_id, existing_fingerprint = existing
+                    if existing_fingerprint != request_fingerprint:
+                        raise IdempotencyConflictError(idempotency_key)
+                    resolved = self._analyses.get(existing_analysis_id)
+                    if resolved is not None:
+                        return resolved
+                    # Receipt exists but the analysis itself was deleted
+                    # (e.g. stopped and reaped) -- fall through and
+                    # recreate, re-recording the same key/fingerprint.
+
+            analysis = factory()
+            self._save_locked(analysis)
+            if idempotency_key:
+                self._idempotency_keys[idempotency_key] = (
+                    analysis.analysis_id,
+                    request_fingerprint,
                 )
+            return analysis
 
     def get_by_id(self, analysis_id: str) -> Analysis | None:
         with self._lock:

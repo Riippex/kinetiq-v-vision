@@ -124,13 +124,31 @@ class TargetTracker:
                 timestamp_utc, reason=ReasonCode.OUT_OF_FRAME
             )
 
-        # 2. If we have a selected target_person_id, check for direct ID match first
+        # 2. If we have a selected target_person_id, check for direct ID match first.
+        # Candidate IDs are assigned by the detector from per-frame detection
+        # order/ranking, not a persistent biometric identity -- an ID match is
+        # necessary but not sufficient. When we have a spatial reference,
+        # require the matched candidate to be spatially continuous with it;
+        # an ID match that "teleports" to an implausible location (an ID
+        # coincidentally reused for a different, unrelated person) must not
+        # be silently confirmed.
         direct_match = next(
             (c for c in candidates if c.candidate_id == self.target_person_id), None
         )
         if direct_match is not None:
             reference_bbox = self.last_known_bbox or direct_match.bbox
             score = self.compute_association_score(direct_match, reference_bbox)
+
+            if (
+                self.last_known_bbox is not None
+                and score < self.config.min_association_score
+            ):
+                # ID matches, but spatial continuity does not -- treat as an
+                # identity conflict rather than a confirmed reacquisition.
+                return self._handle_ambiguous_target(
+                    direct_match, score, timestamp_utc
+                )
+
             # Check for distractors interfering with the direct match
             distractor_conflict = any(
                 c.candidate_id != self.target_person_id
@@ -145,7 +163,19 @@ class TargetTracker:
 
             return self._handle_confirmed_target(direct_match, score, timestamp_utc)
 
-        # 3. Spatial tracking using reference bounding box
+        # 3. No direct ID match. Spatial-only association against the last
+        # known position is, at most, evidence that *something* is near
+        # where the target last was -- it is never sufficient on its own to
+        # confirm identity, since IDs are not persistent (the detector may
+        # simply have reassigned the target a new one -- but so may a
+        # completely different, unrelated person standing nearby). Policy:
+        # a spatially plausible candidate with a non-matching ID is reported
+        # AMBIGUOUS, never CONFIRMED, regardless of score or how many
+        # consecutive frames it persists. This never contributes a
+        # repetition or counts as a switch-free CONFIRMED frame; identity
+        # can only be re-established by an explicit select_target call from
+        # the application layer (a real, intentional reconfirmation), or by
+        # the original candidate_id reappearing (handled above).
         if self.last_known_bbox is None:
             # No reference bbox and target_person_id not in candidates
             return self._handle_missing_target(
@@ -160,30 +190,12 @@ class TargetTracker:
 
         best_candidate, best_score = scored_candidates[0]
 
-        # 4. Check minimum association score
         if best_score < self.config.min_association_score:
             return self._handle_missing_target(
                 timestamp_utc, reason=ReasonCode.LOW_CONFIDENCE
             )
 
-        # 5. Check ambiguity (second candidate has very close score or high IoU overlap)
-        if len(scored_candidates) > 1:
-            second_candidate, second_score = scored_candidates[1]
-            score_diff = best_score - second_score
-            iou_overlap = calculate_iou(best_candidate.bbox, second_candidate.bbox)
-
-            if (
-                score_diff < self.config.ambiguity_delta
-                or iou_overlap > self.config.ambiguity_iou_threshold
-            ):
-                return self._handle_ambiguous_target(
-                    best_candidate, best_score, timestamp_utc
-                )
-
-        # 6. Unambiguous match found! Check reacquisition requirement if recovering from loss/search
-        return self._handle_confirmed_target(
-            best_candidate, best_score, timestamp_utc
-        )
+        return self._handle_ambiguous_target(best_candidate, best_score, timestamp_utc)
 
     def _handle_confirmed_target(
         self, candidate: CandidatePerson, score: float, timestamp_utc: datetime

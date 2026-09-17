@@ -6,10 +6,11 @@ from kinetiq_v_vision.evaluation.tracking import (
 
 
 def test_run_tracking_evaluation_synthetic_scenarios() -> None:
-    """The full default scenario set now includes the adversarial
-    bystander-only scenario, so this is release-INeligible by construction
-    -- see test_bystander_only_scenario_exposes_known_reassociation_defect
-    for why that is the correct, honest result rather than a regression."""
+    """The full default scenario set, including the adversarial
+    bystander-only scenario, is switch-free and release eligible now that
+    TargetTracker's spatial fallback never silently confirms a
+    non-ID-matching candidate (see
+    test_bystander_only_scenario_no_longer_causes_spatial_reassociation)."""
     scenarios = create_synthetic_tracking_scenarios()
     assert len(scenarios) == 4
 
@@ -17,8 +18,8 @@ def test_run_tracking_evaluation_synthetic_scenarios() -> None:
     assert metrics.total_frames == 55
     assert metrics.target_tracked_frames > 0
     assert metrics.is_synthetic is True
-    assert metrics.target_switch_count == 8
-    assert metrics.is_release_eligible is False
+    assert metrics.target_switch_count == 0
+    assert metrics.is_release_eligible is True
 
 
 def test_clean_scenarios_alone_remain_release_eligible() -> None:
@@ -34,19 +35,19 @@ def test_clean_scenarios_alone_remain_release_eligible() -> None:
     assert metrics.is_release_eligible is True
 
 
-def test_bystander_only_scenario_exposes_known_reassociation_defect() -> None:
-    """Regression/disclosure test, not a bug in the test itself: once a
-    tracker has a spatial reference (`last_known_bbox`) and the true target
-    permanently leaves, a same-position bystander with a *different*
-    candidate_id reaches CONFIRMED via TargetTracker's spatial fallback
-    (domain/target_tracker.py), which scores candidates by IoU/centroid
-    distance only and never checks identity. This evaluation harness must
-    detect that as a target switch, not hide it -- VV-402 stays Blocked
-    until the tracker itself rejects/degrades a spatially-plausible but
-    identity-mismatched candidate instead of silently confirming it."""
+def test_bystander_only_scenario_no_longer_causes_spatial_reassociation() -> None:
+    """VV-401 correction: once a tracker has a spatial reference
+    (`last_known_bbox`) and the true target permanently leaves, a
+    same-position bystander under a *different* candidate_id used to reach
+    CONFIRMED via TargetTracker's spatial fallback (a real, reproduced
+    defect -- see git history). The fallback now never promotes a
+    non-ID-matching candidate past AMBIGUOUS, so this adversarial scenario
+    is switch-free and release eligible: the bystander's frames are
+    correctly reported as identity-unresolved (AMBIGUOUS), not silently
+    attributed to the enrolled target."""
     scenario = create_bystander_only_reassociation_scenario()
 
     metrics = run_tracking_evaluation([scenario])
     assert metrics.total_frames == 10
-    assert metrics.target_switch_count == 8
-    assert metrics.is_release_eligible is False
+    assert metrics.target_switch_count == 0
+    assert metrics.is_release_eligible is True

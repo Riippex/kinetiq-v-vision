@@ -54,7 +54,12 @@ def test_target_tracker_direct_id_match() -> None:
     assert res.target_candidate == candidate
 
 
-def test_target_tracker_spatial_association() -> None:
+def test_target_tracker_spatial_only_match_never_confirms() -> None:
+    """Conservative identity policy (VV-401 correction): candidate IDs are
+    assigned from per-frame detection order, not a persistent identity, so
+    spatial proximity to a non-ID-matching candidate is never sufficient to
+    reach CONFIRMED on its own -- it must land AMBIGUOUS and require an
+    explicit reconfirmation (select_target) or the original ID reappearing."""
     now = datetime.now(UTC)
     initial_box = BoundingBox(0.2, 0.2, 0.3, 0.6)
     tracker = TargetTracker(
@@ -72,9 +77,42 @@ def test_target_tracker_spatial_association() -> None:
     )
 
     res = tracker.process_frame([candidate], now)
-    assert res.tracking_state == TrackingState.CONFIRMED
-    assert res.is_attributable is True
+    assert res.tracking_state == TrackingState.AMBIGUOUS
+    assert res.is_attributable is False
     assert res.target_candidate.candidate_id == "det_105"
+
+    # Even many consecutive frames of the same spatial match must never
+    # promote to CONFIRMED without an ID match or explicit reconfirmation.
+    for _ in range(5):
+        res = tracker.process_frame([candidate], now)
+        assert res.tracking_state == TrackingState.AMBIGUOUS
+        assert res.is_attributable is False
+
+
+def test_target_tracker_id_match_with_implausible_teleport_stays_ambiguous() -> None:
+    """Validates spatial continuity even when the candidate_id matches: an
+    ID coincidentally reused for a different, unrelated person at an
+    implausible location must not be silently confirmed."""
+    now = datetime.now(UTC)
+    initial_box = BoundingBox(0.2, 0.2, 0.1, 0.1)
+    tracker = TargetTracker(
+        target_person_id="person_01",
+        initial_bbox=initial_box,
+        config=TargetTrackerConfig(reacquisition_required_frames=1),
+    )
+
+    # Same candidate_id as the enrolled target, but at a completely
+    # different location -- no plausible continuous motion could explain it.
+    teleported = CandidatePerson(
+        candidate_id="person_01",
+        bbox=BoundingBox(0.85, 0.85, 0.1, 0.1),
+        confidence=0.9,
+        detected_at=now,
+    )
+
+    res = tracker.process_frame([teleported], now)
+    assert res.tracking_state == TrackingState.AMBIGUOUS
+    assert res.is_attributable is False
 
 
 def test_target_tracker_ambiguity_detection() -> None:

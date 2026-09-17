@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 
 from kinetiq_v_vision.domain.entities import Analysis, Observation
 
@@ -9,6 +10,31 @@ class AnalysisRepositoryPort(ABC):
     @abstractmethod
     def save(self, analysis: Analysis) -> None:
         """Persist or update an analysis entity."""
+
+    @abstractmethod
+    def create_or_get_by_idempotency_key(
+        self,
+        *,
+        idempotency_key: str | None,
+        request_fingerprint: str,
+        factory: Callable[[], Analysis],
+    ) -> Analysis:
+        """Atomically resolve an idempotent create.
+
+        - If `idempotency_key` is falsy, always calls `factory()`, saves and
+          returns a new `Analysis` (no idempotency tracking).
+        - If `idempotency_key` was already recorded with the same
+          `request_fingerprint`, returns the existing `Analysis` without
+          calling `factory()`.
+        - If `idempotency_key` was already recorded with a *different*
+          `request_fingerprint`, raises `IdempotencyConflictError`.
+        - Otherwise calls `factory()`, saves the result, records the key,
+          and returns it.
+
+        Implementations must perform the check-and-create atomically (e.g.
+        under a single lock acquisition) so concurrent callers with the same
+        key cannot both observe "not yet recorded" and create two analyses.
+        """
 
     @abstractmethod
     def get_by_id(self, analysis_id: str) -> Analysis | None:
