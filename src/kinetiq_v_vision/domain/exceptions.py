@@ -48,6 +48,15 @@ class AnalysisNotTrackingError(DomainError):
         self.current_state = current_state
 
 
+class AnalysisStoppedError(DomainError):
+    """Raised when an operation that requires an active analysis (e.g.
+    ingesting a frame) is attempted after the analysis has been stopped."""
+
+    def __init__(self, analysis_id: str) -> None:
+        super().__init__(f"Analysis '{analysis_id}' is stopped")
+        self.analysis_id = analysis_id
+
+
 class CursorExpiredError(DomainError):
     def __init__(self, requested_cursor: str, oldest_cursor: str | None = None) -> None:
         super().__init__(

@@ -53,6 +53,15 @@ class CandidateListResponse(BaseModel):
     candidates: list[CandidateDTO]
 
 
+class IngestFrameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    frame_index: int = 0
+    timestamp_ms: float = 0.0
+    width: int = 0
+    height: int = 0
+
+
 class RepetitionDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -6,6 +6,10 @@ from kinetiq_v_vision.application.use_cases.create_analysis import (
     CreateAnalysisCommand,
     CreateAnalysisUseCase,
 )
+from kinetiq_v_vision.application.use_cases.ingest_frame import (
+    IngestFrameCommand,
+    IngestFrameUseCase,
+)
 from kinetiq_v_vision.application.use_cases.poll_observations import (
     PollObservationsQuery,
     PollObservationsUseCase,
@@ -22,6 +26,7 @@ from kinetiq_v_vision.interfaces.rest.dto import (
     CandidateListResponse,
     CreateAnalysisRequest,
     CreateAnalysisResponse,
+    IngestFrameRequest,
     ObservationsPageResponse,
     SelectTargetRequest,
     SelectTargetResponse,
@@ -43,6 +48,10 @@ def get_poll_use_case() -> PollObservationsUseCase:
 
 
 def get_stop_use_case() -> StopAnalysisUseCase:
+    raise NotImplementedError("Dependency injected at app factory")
+
+
+def get_ingest_frame_use_case() -> IngestFrameUseCase:
     raise NotImplementedError("Dependency injected at app factory")
 
 
@@ -187,6 +196,42 @@ def get_candidates(
             detected_at=c.detected_at.isoformat(),
         )
         for c in analysis.candidates.values()
+    ]
+    return CandidateListResponse(candidates=candidate_dtos)
+
+
+@router.post(
+    "/{analysis_id}/frames",
+    status_code=status.HTTP_200_OK,
+    response_model=CandidateListResponse,
+)
+def ingest_frame(
+    analysis_id: str,
+    request: IngestFrameRequest,
+    use_case: IngestFrameUseCase = Depends(get_ingest_frame_use_case),
+) -> CandidateListResponse:
+    """Submits a frame for person detection, merging any detected
+    candidates into the analysis. Not part of the documented v1 contract
+    table (contracts/v1/rest-api.md) yet -- an additive capability that
+    fills the "how do candidates get populated" gap between creating an
+    analysis and confirming a target, backed by whatever PersonDetectorPort
+    is wired (a deterministic stub in this build; see bootstrap/container.py)."""
+    command = IngestFrameCommand(
+        analysis_id=analysis_id,
+        frame_index=request.frame_index,
+        timestamp_ms=request.timestamp_ms,
+        width=request.width,
+        height=request.height,
+    )
+    candidates = use_case.execute(command)
+    candidate_dtos = [
+        CandidateDTO(
+            candidate_id=c.candidate_id,
+            bbox=[c.bbox.x, c.bbox.y, c.bbox.width, c.bbox.height],
+            confidence=c.confidence,
+            detected_at=c.detected_at.isoformat(),
+        )
+        for c in candidates
     ]
     return CandidateListResponse(candidates=candidate_dtos)
 

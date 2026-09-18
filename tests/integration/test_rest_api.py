@@ -19,6 +19,7 @@ from kinetiq_v_vision.domain.value_objects import (
     TrackingState,
     VisibilityState,
 )
+from kinetiq_v_vision.interfaces.rest.routes import get_repository
 
 SCHEMA_PATH = (
     Path(__file__).resolve().parents[2]
@@ -75,9 +76,7 @@ def test_rest_analysis_lifecycle(
 
     # 3. Add a candidate and get candidates
     # Add candidate via repo directly to simulate detector discovery
-    repo = client.app.dependency_overrides[
-        list(client.app.dependency_overrides.keys())[4]
-    ]()
+    repo = client.app.dependency_overrides[get_repository]()
     analysis = repo.get_by_id(analysis_id)
     analysis.add_candidate(
         CandidatePerson(
@@ -154,3 +153,62 @@ def test_rest_analysis_lifecycle(
     # 7. Stop analysis
     del_resp = client.delete(f"/v1/analyses/{analysis_id}")
     assert del_resp.status_code == 204
+
+
+def test_ingest_frame_populates_candidates_via_rest(client: TestClient) -> None:
+    create_resp = client.post(
+        "/v1/analyses",
+        json={
+            "session_id": "b1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6e",
+            "source_id": "phone-camera-02",
+            "exercise_key": "push_up",
+        },
+    )
+    assert create_resp.status_code == 201
+    analysis_id = create_resp.json()["analysis_id"]
+
+    # No candidates exist yet -- frames/inference is the only populating path.
+    cand_resp = client.get(f"/v1/analyses/{analysis_id}/candidates")
+    assert cand_resp.json()["candidates"] == []
+
+    frame_resp = client.post(
+        f"/v1/analyses/{analysis_id}/frames",
+        json={"frame_index": 0, "timestamp_ms": 33.3, "width": 640, "height": 480},
+    )
+    assert frame_resp.status_code == 200
+    candidates = frame_resp.json()["candidates"]
+    assert len(candidates) == 1
+    assert candidates[0]["candidate_id"] == "candidate_01"
+
+    cand_resp = client.get(f"/v1/analyses/{analysis_id}/candidates")
+    assert len(cand_resp.json()["candidates"]) == 1
+
+
+def test_ingest_frame_unknown_analysis_returns_404(client: TestClient) -> None:
+    resp = client.post(
+        "/v1/analyses/does-not-exist/frames",
+        json={"frame_index": 0},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "ANALYSIS_NOT_FOUND"
+
+
+def test_ingest_frame_on_stopped_analysis_returns_409(client: TestClient) -> None:
+    create_resp = client.post(
+        "/v1/analyses",
+        json={
+            "session_id": "c1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6f",
+            "source_id": "phone-camera-03",
+            "exercise_key": "plank",
+        },
+    )
+    analysis_id = create_resp.json()["analysis_id"]
+    stop_resp = client.delete(f"/v1/analyses/{analysis_id}")
+    assert stop_resp.status_code == 204
+
+    frame_resp = client.post(
+        f"/v1/analyses/{analysis_id}/frames",
+        json={"frame_index": 0},
+    )
+    assert frame_resp.status_code == 409
+    assert frame_resp.json()["error"]["code"] == "ANALYSIS_STOPPED"

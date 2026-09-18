@@ -6,6 +6,10 @@ from kinetiq_v_vision.application.use_cases.create_analysis import (
     CreateAnalysisCommand,
     CreateAnalysisUseCase,
 )
+from kinetiq_v_vision.application.use_cases.ingest_frame import (
+    IngestFrameCommand,
+    IngestFrameUseCase,
+)
 from kinetiq_v_vision.application.use_cases.poll_observations import (
     PollObservationsQuery,
     PollObservationsUseCase,
@@ -17,6 +21,8 @@ from kinetiq_v_vision.application.use_cases.select_target import (
 from kinetiq_v_vision.application.use_cases.stop_analysis import StopAnalysisUseCase
 from kinetiq_v_vision.domain.entities import CandidatePerson, Observation
 from kinetiq_v_vision.domain.exceptions import (
+    AnalysisNotFoundError,
+    AnalysisStoppedError,
     CursorExpiredError,
     IdempotencyConflictError,
     StaleEpochError,
@@ -29,6 +35,7 @@ from kinetiq_v_vision.domain.value_objects import (
     TrackingState,
     VisibilityState,
 )
+from kinetiq_v_vision.infrastructure.inference.stub import StubPersonDetectorAdapter
 from kinetiq_v_vision.infrastructure.state.in_memory import InMemoryAnalysisRepository
 from kinetiq_v_vision.infrastructure.telemetry.logger import LoggingTelemetryAdapter
 
@@ -263,3 +270,97 @@ def test_create_analysis_idempotent_replay_resolves_after_resave() -> None:
 
     second = create_uc.execute(cmd)
     assert repo.get_by_id(second.analysis_id) is not None
+
+
+def test_ingest_frame_populates_candidates_from_detector() -> None:
+    repo = InMemoryAnalysisRepository()
+    telemetry = LoggingTelemetryAdapter()
+    create_uc = CreateAnalysisUseCase(repo, telemetry)
+    ingest_uc = IngestFrameUseCase(
+        repository=repo,
+        detector=StubPersonDetectorAdapter(),
+        telemetry=telemetry,
+    )
+
+    analysis = create_uc.execute(
+        CreateAnalysisCommand(
+            session_id="session-frame-1",
+            source_id="camera-front",
+            exercise_key="push_up",
+        )
+    )
+    assert analysis.candidates == {}
+
+    candidates = ingest_uc.execute(
+        IngestFrameCommand(analysis_id=analysis.analysis_id, frame_index=0)
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].candidate_id == "candidate_01"
+
+    persisted = repo.get_by_id(analysis.analysis_id)
+    assert persisted is not None
+    assert "candidate_01" in persisted.candidates
+
+
+def test_ingest_frame_merges_repeated_detections_without_duplicating() -> None:
+    repo = InMemoryAnalysisRepository()
+    telemetry = LoggingTelemetryAdapter()
+    create_uc = CreateAnalysisUseCase(repo, telemetry)
+    ingest_uc = IngestFrameUseCase(
+        repository=repo,
+        detector=StubPersonDetectorAdapter(),
+        telemetry=telemetry,
+    )
+
+    analysis = create_uc.execute(
+        CreateAnalysisCommand(
+            session_id="session-frame-2",
+            source_id="camera-front",
+            exercise_key="plank",
+        )
+    )
+
+    ingest_uc.execute(IngestFrameCommand(analysis_id=analysis.analysis_id, frame_index=0))
+    candidates = ingest_uc.execute(
+        IngestFrameCommand(analysis_id=analysis.analysis_id, frame_index=1)
+    )
+
+    assert len(candidates) == 1
+
+
+def test_ingest_frame_raises_for_unknown_analysis() -> None:
+    repo = InMemoryAnalysisRepository()
+    telemetry = LoggingTelemetryAdapter()
+    ingest_uc = IngestFrameUseCase(
+        repository=repo,
+        detector=StubPersonDetectorAdapter(),
+        telemetry=telemetry,
+    )
+
+    with pytest.raises(AnalysisNotFoundError):
+        ingest_uc.execute(IngestFrameCommand(analysis_id="missing-analysis"))
+
+
+def test_ingest_frame_rejects_stopped_analysis() -> None:
+    repo = InMemoryAnalysisRepository()
+    telemetry = LoggingTelemetryAdapter()
+    create_uc = CreateAnalysisUseCase(repo, telemetry)
+    stop_uc = StopAnalysisUseCase(repo, telemetry)
+    ingest_uc = IngestFrameUseCase(
+        repository=repo,
+        detector=StubPersonDetectorAdapter(),
+        telemetry=telemetry,
+    )
+
+    analysis = create_uc.execute(
+        CreateAnalysisCommand(
+            session_id="session-frame-3",
+            source_id="camera-front",
+            exercise_key="glute_bridge",
+        )
+    )
+    stop_uc.execute(analysis.analysis_id)
+
+    with pytest.raises(AnalysisStoppedError):
+        ingest_uc.execute(IngestFrameCommand(analysis_id=analysis.analysis_id))

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from kinetiq_v_vision.application.use_cases.create_analysis import CreateAnalysisUseCase
+from kinetiq_v_vision.application.use_cases.ingest_frame import IngestFrameUseCase
 from kinetiq_v_vision.application.use_cases.poll_observations import (
     PollObservationsUseCase,
 )
@@ -16,6 +17,7 @@ from kinetiq_v_vision.infrastructure.telemetry.logger import LoggingTelemetryAda
 from kinetiq_v_vision.interfaces.rest.app import create_app
 from kinetiq_v_vision.interfaces.rest.routes import (
     get_create_use_case,
+    get_ingest_frame_use_case,
     get_poll_use_case,
     get_repository,
     get_select_use_case,
@@ -53,6 +55,11 @@ class Container:
             repository=self.repository,
             telemetry=self.telemetry,
         )
+        self.ingest_frame_use_case = IngestFrameUseCase(
+            repository=self.repository,
+            detector=self.detector,
+            telemetry=self.telemetry,
+        )
 
     def create_configured_app(self) -> FastAPI:
         """Instantiate and configure the FastAPI application with dependency overrides."""
@@ -69,6 +76,9 @@ class Container:
         )
         app.dependency_overrides[get_stop_use_case] = lambda: (
             self.stop_analysis_use_case
+        )
+        app.dependency_overrides[get_ingest_frame_use_case] = lambda: (
+            self.ingest_frame_use_case
         )
         app.dependency_overrides[get_repository] = lambda: self.repository
 

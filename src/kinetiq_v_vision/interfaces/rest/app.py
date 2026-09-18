@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from kinetiq_v_vision.domain.exceptions import (
     AnalysisNotFoundError,
+    AnalysisStoppedError,
     CursorExpiredError,
     IdempotencyConflictError,
     InvalidEpochError,
@@ -121,6 +122,24 @@ def create_app() -> FastAPI:
                     "correlation_id": corr_id,
                     "retryable": False,
                     "details": {"idempotency_key": exc.idempotency_key},
+                }
+            },
+        )
+
+    @app.exception_handler(AnalysisStoppedError)
+    async def analysis_stopped_handler(
+        request: Request, exc: AnalysisStoppedError
+    ) -> JSONResponse:
+        corr_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "error": {
+                    "code": "ANALYSIS_STOPPED",
+                    "message": str(exc),
+                    "correlation_id": corr_id,
+                    "retryable": False,
+                    "details": {"analysis_id": exc.analysis_id},
                 }
             },
         )
